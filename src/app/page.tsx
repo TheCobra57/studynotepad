@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import {
   BookOpen,
   Database,
@@ -39,6 +39,8 @@ import { NotesPane } from '@/components/notepad/notes-pane'
 import { EditorPane } from '@/components/notepad/editor-pane'
 import { CheatSheet } from '@/components/notepad/cheat-sheet'
 import { ThemeToggle } from '@/components/notepad/theme-toggle'
+import { PrintRoot } from '@/components/notepad/print-root'
+import { PrintDialog } from '@/components/notepad/print-dialog'
 
 const emptySubscribe = () => () => {}
 
@@ -53,7 +55,22 @@ export default function Home() {
   const [mobileView, setMobileView] = useState<MobileView>('tree')
   const [cheatOpen, setCheatOpen] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
+  const [printOpen, setPrintOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Ctrl/Cmd+P opens the customisable print dialog instead of the raw browser print
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        if (useNotepadStore.getState().selectedNoteId) {
+          e.preventDefault()
+          setPrintOpen(true)
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const subjects = useNotepadStore((s) => s.subjects)
   const chapters = useNotepadStore((s) => s.chapters)
@@ -124,7 +141,8 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-dvh flex-col bg-background text-foreground">
+    <>
+      <div className="flex h-dvh flex-col bg-background text-foreground">
       {/* Header */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
         <div className="flex items-center gap-2.5">
@@ -205,6 +223,7 @@ export default function Home() {
             onBack={() => setMobileView('notes')}
             onOpenSidebar={() => setMobileView('tree')}
             onOpenCheatSheet={() => setCheatOpen(true)}
+            onPrint={() => setPrintOpen(true)}
           />
         </section>
       </main>
@@ -216,7 +235,7 @@ export default function Home() {
           in your browser
         </span>
         <span className="hidden md:inline">
-          {'$…$'} math · {'\\ce{}'} chemistry · type / to insert
+          {'$…$'} math · {'\\ce{}'} chemistry · type / to insert · Ctrl+P print
         </span>
       </footer>
 
@@ -257,6 +276,12 @@ export default function Home() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </div>
+
+      {/* Print pipeline — #print-root is a direct child of <body> so that
+          @media print can hide everything else while printing */}
+      <PrintRoot />
+      <PrintDialog open={printOpen} onOpenChange={setPrintOpen} />
+    </>
   )
 }

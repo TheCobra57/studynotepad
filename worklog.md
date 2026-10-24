@@ -94,3 +94,26 @@ Work Log:
 Stage Summary:
 - App is now a genuine WYSIWYG Notion-like editor: notes always look rendered; you edit in place; "/" inserts anything (incl. rendered equations/chemistry with live preview)
 - localStorage format unchanged (markdown) — no migration needed; all previous flows (search, export, import, seeds) intact
+
+---
+Task ID: 6
+Agent: main (Z.ai Code)
+Task: Print feature with customisable settings — print output identical to the preview (the reason the user ditched Notion)
+
+Work Log:
+- New src/lib/notepad/print.ts — PrintSettings model (paper a4/letter/a5/legal, orientation, marginMm 0–40, textSizePt 9–16, colour color/bw, backgrounds, titleBlock, pageNumbers), paper geometry (mm⇄px @96dpi), buildPrintCss() generating @page size/margin + @page @bottom-center "Page X of Y" margin boxes, zustand persist store (localStorage key studypad-print-v1)
+- markdown-preview.tsx: added optional prepend + style props (print title block + pt base font size) — backwards compatible
+- New print-body.tsx — PrintBody = single render pipeline shared by the real print (#print-root), the hidden pagination measurement container and the visible preview sheets; PrintTitleBlock (subject-colour dot · breadcrumb, title, date); bw/print-no-bg flags via wrapper classes
+- New print-root.tsx — #print-root (direct <body> child, display:none on screen; @media print hides body > *:not(#print-root) and shows only the print output) + <style> with the dynamic @page rules
+- New print-dialog.tsx (~430 lines) — settings column (paper select, orientation toggle, margins slider, text-size slider, colour toggle, 3 switches, reset) + live paginated preview: hidden offscreen measurement at true page width → greedy pagination mirroring the print CSS break rules (break-inside avoid; headings keep-with-next) → paper sheets with zoom (Fit/75%/100%; fit computed from live DOM); footer chips "Page X of Y"; Print button → window.print()
+- editor-pane.tsx: Print button (with Printer icon) in the note top bar; page.tsx: PrintRoot/PrintDialog mounts, Ctrl/Cmd+P intercept opens the dialog; footer hint updated
+- globals.css: print section — @media print rules (hide everything except #print-root, break-inside/break-after mirrors, print-color-adjust exact), .print-content em-based typography (scales with pt setting, immune to dark mode), title-block styles, .print-measure offscreen, .print-sheet paper look
+- Bugs found & fixed during browser verification:
+  • Dev-server served stale CSS chunk after globals.css edit (Turbopack CSS module cache) — fixed by full dev-server restart (kill + setsid respawn)
+  • Pagination loop lost blocks: `continue` in a for-loop still runs i++ → every flushed block was dropped (e.g. the CH₄ combustion equation vanished). Rewrote without continue — flush() then place; verified all 16 measured blocks render (16=16)
+  • "Fit" zoom feedback loop: sheet width inflated the scroll container's min-content → flex column (min-width:auto) grew → next fit measurement read the grown container (self-sustaining at wrong size). Fixed with min-w-0 on the preview flex column; fit now computed from live DOM at build time (RO + window resize only act as re-run triggers)
+- Browser-verified (agent-browser + PDF + VLM): dialog opens from button and Ctrl+P; all settings live-update preview AND @page CSS (A5 → 559px sheets + size:148mm 210mm; landscape; margins 20mm → 75.59px padding; 13pt; bw → grayscale filter; backgrounds/title/page-numbers switches; reset); pagination parity (7+8 blocks, 16/16 placed, headings not stranded); KaTeX/mhchem renders in preview (4 display + inline) and in the actual PDF output; window.print() safe no-op in headless; REAL PDF generated via print pipeline — pure print output (title block, rendered equations, "Page 1 of 1" footer, ZERO app chrome) — page size comes from the user's browser print dialog honouring @page (test tool used its Letter default, a tool limitation, not an app defect); dark mode prints light-on-white; empty note → 1 page (title only); test note created+deleted (data back to 8 notes); settings persist (studypad-print-v1) across reload; mobile 390px (314px fit sheets, no horizontal scroll); 100% zoom contained; console 0 errors; lint 0 errors; VLM QA of dialog screenshot: PASS×3
+
+Stage Summary:
+- Print pipeline = the preview: one PrintBody render feeds the real print, the measurement and the preview — "same as preview" by construction
+- 8 customisable settings persisted in localStorage; page numbers via @page margin boxes (graceful degrade in older browsers); @page size/margin drives real browser printing + "Save as PDF"

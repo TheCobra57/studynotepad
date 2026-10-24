@@ -254,3 +254,257 @@
 .block-editor textarea::placeholder {
   opacity: 1;
 }
+
+/* ---------- Print pipeline (dialog preview + @media print share these) ---------- */
+
+/* on screen the print root is hidden; while printing it is the only visible node */
+#print-root {
+  display: none;
+}
+
+@media print {
+  body > *:not(#print-root) {
+    display: none !important;
+  }
+  #print-root {
+    display: block !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  /* mirror the preview's pagination rules in the real print engine */
+  #print-root .print-content > * {
+    break-inside: avoid-page;
+  }
+  #print-root .print-content h1,
+  #print-root .print-content h2,
+  #print-root .print-content h3,
+  #print-root .print-content h4 {
+    break-after: avoid-page;
+  }
+}
+
+/* shared flags — applied to #print-root and to the preview sheet stack */
+.print-bw {
+  filter: grayscale(1);
+}
+.print-no-bg .print-content pre {
+  background: transparent !important;
+}
+.print-no-bg .print-content code {
+  background: transparent !important;
+}
+.print-no-bg .print-content blockquote {
+  background: transparent !important;
+  border-left-color: #9ca3af;
+}
+.print-no-bg .print-content th {
+  background: transparent !important;
+}
+
+/*
+ * Printed page typography — em-based so everything scales with the
+ * "Text size" setting (base font-size set in pt via inline style).
+ * These rules come after .markdown-body so they win on shared properties.
+ */
+.print-content {
+  line-height: 1.7;
+  color: #111827;
+  overflow-wrap: break-word;
+}
+.print-content h1 {
+  font-size: 1.8em;
+  font-weight: 700;
+  margin: 1.1em 0 0.45em;
+  letter-spacing: -0.015em;
+}
+.print-content h2 {
+  font-size: 1.45em;
+  font-weight: 700;
+  margin: 1em 0 0.4em;
+}
+.print-content h3 {
+  font-size: 1.22em;
+  font-weight: 600;
+  margin: 0.95em 0 0.35em;
+}
+.print-content h4,
+.print-content h5,
+.print-content h6 {
+  font-size: 1.05em;
+  font-weight: 600;
+  margin: 0.9em 0 0.3em;
+}
+.print-content p {
+  margin: 0.65em 0;
+}
+.print-content ul,
+.print-content ol {
+  margin: 0.65em 0;
+  padding-left: 1.7em;
+}
+.print-content ul {
+  list-style: disc;
+}
+.print-content ol {
+  list-style: decimal;
+}
+.print-content li {
+  margin: 0.28em 0;
+}
+.print-content li > ul,
+.print-content li > ol {
+  margin: 0.28em 0;
+}
+.print-content input[type='checkbox'] {
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.45em;
+  accent-color: #10b981;
+  vertical-align: -0.1em;
+}
+.print-content blockquote {
+  margin: 0.9em 0;
+  padding: 0.1em 1em;
+  border-left: 3px solid #10b981;
+  background: #f3f4f6;
+  border-radius: 0 6px 6px 0;
+}
+.print-content code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.88em;
+  background: #f3f4f6;
+  padding: 0.12em 0.38em;
+  border-radius: 4px;
+}
+.print-content pre {
+  margin: 0.9em 0;
+  padding: 0.85em 1em;
+  background: #f3f4f6;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.print-content pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+.print-content pre,
+.print-content pre code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.print-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.9em 0;
+  font-size: 0.92em;
+}
+.print-content th,
+.print-content td {
+  border: 1px solid #d1d5db;
+  padding: 0.45em 0.7em;
+  text-align: left;
+  vertical-align: top;
+}
+.print-content th {
+  background: #f3f4f6;
+  font-weight: 600;
+}
+.print-content hr {
+  border: 0;
+  border-top: 1px solid #d1d5db;
+  margin: 1.3em 0;
+}
+.print-content a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.print-content img {
+  max-width: 100%;
+}
+.print-content .katex {
+  font-size: 1.05em;
+}
+.print-content .katex-display {
+  margin: 0.9em 0;
+  text-align: center;
+}
+.print-content .katex-display > .katex {
+  white-space: normal;
+}
+.print-content .katex-error {
+  color: #dc2626;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.85em;
+}
+
+/* title block printed above the note on page 1 */
+.print-title-block {
+  margin: 0 0 1.5em;
+  padding-bottom: 1.1em;
+  border-bottom: 1px solid #e5e7eb;
+}
+.print-title-breadcrumb {
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 0.55em;
+}
+.print-dot {
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 999px;
+  margin-right: 0.45em;
+}
+.print-title-text {
+  font-size: 1.9em;
+  font-weight: 700;
+  line-height: 1.22;
+  letter-spacing: -0.02em;
+  color: #111827;
+  margin: 0 0 0.45em;
+}
+.print-title-meta {
+  font-size: 0.8em;
+  color: #6b7280;
+}
+
+/* hidden offscreen container used to measure page breaks at true page width */
+.print-measure {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* paper sheets in the print dialog preview */
+.print-sheet {
+  background: #fff;
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 16%),
+    0 0 0 1px rgb(0 0 0 / 6%);
+}
+.print-sheet-page {
+  position: relative;
+  background: #fff;
+}
+.print-sheet-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}

@@ -25,11 +25,26 @@ function normalizeMathBlocks(src: string): string {
   )
 }
 
-/** Renders a full markdown document with GFM tables, $math$ and \ce{} chemistry */
-export function MarkdownPreview({ content, className }: { content: string; className?: string }) {
+/**
+ * Renders a full markdown document with GFM tables, $math$ and \ce{} chemistry.
+ * `prepend` renders before the markdown content (used for the print title block)
+ * and `style` is applied to the wrapper (used for the print base font size in pt).
+ */
+export function MarkdownPreview({
+  content,
+  className,
+  prepend,
+  style,
+}: {
+  content: string
+  className?: string
+  prepend?: React.ReactNode
+  style?: React.CSSProperties
+}) {
   const normalized = useMemo(() => normalizeMathBlocks(content), [content])
   return (
-    <div className={cn('markdown-body', className)}>
+    <div className={cn('markdown-body', className)} style={style}>
+      {prepend}
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[

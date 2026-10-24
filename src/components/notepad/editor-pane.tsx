@@ -24,6 +24,7 @@ import {
   PanelLeft,
   Pin,
   PinOff,
+  Printer,
   Quote,
   Sigma,
   Table,
@@ -61,9 +62,10 @@ interface EditorPaneProps {
   onBack?: () => void
   onOpenSidebar?: () => void
   onOpenCheatSheet?: () => void
+  onPrint?: () => void
 }
 
-export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet }: EditorPaneProps) {
+export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }: EditorPaneProps) {
   const note = useSelectedNote()
   const chapters = useNotepadStore((s) => s.chapters)
   const subjects = useNotepadStore((s) => s.subjects)
@@ -199,8 +201,22 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet }: EditorPa
           {chapter && <span className="truncate">{chapter.name}</span>}
         </div>
 
-        {/* Note menu */}
-        <DropdownMenu>
+        <div className="ml-auto flex items-center gap-1.5">
+          {onPrint && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 px-2.5"
+              onClick={onPrint}
+              title="Print (Ctrl+P)"
+            >
+              <Printer className="h-4 w-4" />
+              <span className="hidden sm:inline">Print</span>
+            </Button>
+          )}
+
+          {/* Note menu */}
+          <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8">
               <MoreHorizontal className="h-4 w-4" />
@@ -223,7 +239,8 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet }: EditorPa
               <Trash2 className="h-4 w-4" /> Delete note
             </DropdownMenuItem>
           </DropdownMenuContent>
-        </DropdownMenu>
+          </DropdownMenu>
+        </div>
       </div>
 
       {/* Toolbar */}
