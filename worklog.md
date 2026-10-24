@@ -117,3 +117,20 @@ Work Log:
 Stage Summary:
 - Print pipeline = the preview: one PrintBody render feeds the real print, the measurement and the preview — "same as preview" by construction
 - 8 customisable settings persisted in localStorage; page numbers via @page margin boxes (graceful degrade in older browsers); @page size/margin drives real browser printing + "Save as PDF"
+
+---
+Task ID: 7
+Agent: main (Z.ai Code)
+Task: Make the project Vercel-deployment ready (user asked "so i just host it in vercel and it works right?")
+
+Work Log:
+- Verified app is 100% client-side: zustand persist → localStorage (studypad-data-v1, studypad-print-v1); KaTeX CSS/mhchem bundled from node_modules (no CDN); fonts via next/font; no API/DB/env vars needed
+- next.config.ts: removed output:"standalone" (sandbox-only, not recommended on Vercel)
+- package.json: build script simplified to plain "next build" (removed cp-into-standalone steps that would fail without standalone output)
+- layout.tsx: favicon now /logo.svg from public/ (was external z-cdn URL) → fully self-contained deployment
+- Left "start" script untouched (sandbox-only; Vercel uses its own runtime for Next.js)
+- Dev server auto-restarted on config change; GET / → 200, healthy
+
+Stage Summary:
+- Project deploys to Vercel with zero config: GitHub import → Framework preset auto-detects Next.js → Deploy; no env vars, no database
+- Key caveat communicated to user: localStorage data is per-browser/per-device (no sync) — use built-in Export/Import for backup/transfer

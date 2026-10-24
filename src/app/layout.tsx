@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     "A local-first study notepad: organise subjects, chapters and notes. Write chemical equations and math formulas with LaTeX, rendered live.",
   keywords: ["study", "notepad", "notes", "chemistry", "equations", "LaTeX", "KaTeX"],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
 };
 
