@@ -1,125 +1,155 @@
-export type SnippetCategory = 'format' | 'math' | 'chem'
+import type { BlockType } from '@/lib/notepad/blocks'
 
-export interface SlashItem {
+export type CommandIcon =
+  | 'h1'
+  | 'h2'
+  | 'h3'
+  | 'bullet'
+  | 'numbered'
+  | 'todo'
+  | 'quote'
+  | 'divider'
+  | 'table'
+  | 'code'
+  | 'math'
+  | 'chem'
+
+export interface SlashCommand {
   id: string
   label: string
   hint?: string
+  /** space-lowercased keywords used for filtering while typing after "/" */
   keywords: string
-  /** text inserted into the note */
-  insert: string
-  /** caret offset inside `insert` where the cursor should land (from end: negative) */
+  icon: CommandIcon
+  /** turn the (empty) current block into this type */
+  blockType?: BlockType
+  /** initial source text for the new/transformed block */
+  blockText?: string
+  /** caret position inside blockText (from its end: negative), applied on focus */
   caretFromEnd?: number
+  /** insert this string at the caret of the current text block instead */
+  inline?: string
+  /** rendered LaTeX preview (for template items) */
+  preview?: string
 }
 
-/** Items offered by the Notion-style "/" quick-insert menu in the editor */
-export const SLASH_ITEMS: SlashItem[] = [
+/** Notion-style "/" commands for the block editor */
+export const BLOCK_COMMANDS: SlashCommand[] = [
   {
     id: 'h1',
     label: 'Heading 1',
     hint: 'Big section title',
-    keywords: 'h1 title heading',
-    insert: '# ',
+    keywords: 'h1 title heading big',
+    icon: 'h1',
+    blockType: 'h1',
   },
   {
     id: 'h2',
     label: 'Heading 2',
     hint: 'Medium section title',
     keywords: 'h2 subtitle heading',
-    insert: '## ',
+    icon: 'h2',
+    blockType: 'h2',
   },
   {
     id: 'h3',
     label: 'Heading 3',
     hint: 'Small section title',
-    keywords: 'h3 heading',
-    insert: '### ',
+    keywords: 'h3 heading small',
+    icon: 'h3',
+    blockType: 'h3',
   },
   {
     id: 'bullet',
     label: 'Bulleted list',
-    hint: 'Simple bullet list',
+    hint: 'Simple bullet point',
     keywords: 'bullet list unordered ul point',
-    insert: '- First point\n- Second point',
-    caretFromEnd: -13,
+    icon: 'bullet',
+    blockType: 'bullet',
   },
   {
     id: 'numbered',
     label: 'Numbered list',
-    hint: 'Ordered list',
-    keywords: 'numbered list ordered ol',
-    insert: '1. First item\n2. Second item',
-    caretFromEnd: -12,
+    hint: 'Ordered step',
+    keywords: 'numbered list ordered ol step',
+    icon: 'numbered',
+    blockType: 'numbered',
   },
   {
     id: 'todo',
-    label: 'To-do checklist',
+    label: 'To-do list',
     hint: 'Track tasks with checkboxes',
-    keywords: 'todo task check checkbox',
-    insert: '- [ ] Revise this topic\n- [ ] Solve practice questions',
-    caretFromEnd: -30,
+    keywords: 'todo task check checkbox done',
+    icon: 'todo',
+    blockType: 'todo',
   },
   {
     id: 'quote',
     label: 'Quote',
-    hint: 'Callout / quotation',
-    keywords: 'quote blockquote callout',
-    insert: '> Remember this!',
-    caretFromEnd: -1,
+    hint: 'Callout or quotation',
+    keywords: 'quote blockquote callout remember',
+    icon: 'quote',
+    blockType: 'quote',
   },
   {
     id: 'divider',
     label: 'Divider',
-    hint: 'Horizontal line',
+    hint: 'Visual separator line',
     keywords: 'divider line hr rule separator',
-    insert: '\n---\n',
+    icon: 'divider',
+    blockType: 'divider',
   },
   {
     id: 'table',
     label: 'Table',
-    hint: 'Comparison table',
-    keywords: 'table grid rows columns',
-    insert: '| Term | Meaning |\n|---|---|\n|  |  |',
+    hint: 'Comparison table (edit raw, preview live)',
+    keywords: 'table grid rows columns comparison',
+    icon: 'table',
+    blockType: 'table',
+    blockText: '| Term | Meaning |\n|---|---|\n|  |  |',
     caretFromEnd: -3,
   },
   {
     id: 'code',
     label: 'Code block',
     hint: 'Monospaced code',
-    keywords: 'code snippet pre',
-    insert: '```\n\n```',
-    caretFromEnd: -4,
+    keywords: 'code snippet pre mono program',
+    icon: 'code',
+    blockType: 'code',
   },
   {
-    id: 'math-block',
-    label: 'Equation (math)',
-    hint: 'Centered LaTeX block — type $$',
-    keywords: 'math equation latex formula sum integral $$ block',
-    insert: '$$\nE = mc^2\n$$',
-    caretFromEnd: -4,
+    id: 'math',
+    label: 'Equation',
+    hint: 'Centered LaTeX — click it any time to edit',
+    keywords: 'math equation latex formula block sum integral $$ display',
+    icon: 'math',
+    blockType: 'math',
+  },
+  {
+    id: 'chem',
+    label: 'Chemical equation',
+    hint: 'Reaction with \\ce{} — renders instantly',
+    keywords: 'chem chemistry chemical equation reaction ce formula molecule balanced',
+    icon: 'chem',
+    blockType: 'math',
+    blockText: '\\ce{}',
+    caretFromEnd: -1,
   },
   {
     id: 'math-inline',
     label: 'Inline math',
-    hint: 'LaTeX inside text — type $',
-    keywords: 'math inline latex $',
-    insert: '$x^2 + y^2$',
-    caretFromEnd: -1,
-  },
-  {
-    id: 'chem-block',
-    label: 'Chemical equation',
-    hint: 'Balanced reaction with \\ce{}',
-    keywords: 'chem chemistry chemical equation reaction ce formula molecule',
-    insert: '$$\n\\ce{2H2 + O2 -> 2H2O}\n$$',
-    caretFromEnd: -4,
+    hint: 'LaTeX inside a sentence — $…$',
+    keywords: 'math inline latex $ formula small',
+    icon: 'math',
+    inline: '$x^2 + y^2$',
   },
   {
     id: 'chem-inline',
     label: 'Inline chemical formula',
     hint: 'Small formula inside text',
-    keywords: 'chem chemistry inline formula molecule h2o',
-    insert: '$\\ce{H2SO4}$',
-    caretFromEnd: -1,
+    keywords: 'chem chemistry inline formula molecule h2o water',
+    icon: 'chem',
+    inline: '$\\ce{H2SO4}$',
   },
 ]
 
@@ -129,11 +159,11 @@ export interface FormulaTemplate {
   label: string
   /** LaTeX source that gets inserted */
   insert: string
-  /** LaTeX source shown as a rendered preview (often the same minus block markers) */
+  /** LaTeX source shown as a rendered preview */
   preview: string
 }
 
-/** Ready-made formulas for the "Formula" toolbar dropdown */
+/** Ready-made formulas for the toolbar dropdown (also appear in the / menu) */
 export const FORMULA_TEMPLATES: FormulaTemplate[] = [
   {
     id: 'chem-balance',
@@ -234,3 +264,42 @@ export const FORMULA_TEMPLATES: FormulaTemplate[] = [
     preview: '\\approx \\; \\pm',
   },
 ]
+
+/** Strip $$…$$ / $…$ wrappers from a template insert → { tex, isBlock } */
+export function unwrapTemplate(insert: string): { tex: string; isBlock: boolean } {
+  const s = insert.trim()
+  if (s.startsWith('$$')) {
+    return { tex: s.replace(/^\$\$/, '').replace(/\$\$$/, '').trim(), isBlock: true }
+  }
+  if (s.startsWith('$') && s.endsWith('$') && s.length > 1) {
+    return { tex: s.slice(1, -1), isBlock: false }
+  }
+  return { tex: s, isBlock: false }
+}
+
+/** Formula templates expressed as / commands with live previews */
+export const TEMPLATE_COMMANDS: SlashCommand[] = FORMULA_TEMPLATES.map((t) => {
+  const { tex, isBlock } = unwrapTemplate(t.insert)
+  return {
+    id: `tpl-${t.id}`,
+    label: t.label,
+    hint: t.category === 'chem' ? 'Chemistry template' : 'Math template',
+    keywords: `${t.category} template formula preset ${t.label.toLowerCase()}`,
+    icon: (t.category === 'chem' ? 'chem' : 'math') as CommandIcon,
+    preview: t.preview,
+    ...(isBlock
+      ? { blockType: 'math' as BlockType, blockText: tex }
+      : { inline: `$${tex}$` }),
+  }
+})
+
+export const ALL_COMMANDS: SlashCommand[] = [...BLOCK_COMMANDS, ...TEMPLATE_COMMANDS]
+
+/** Filter commands for a typed / query */
+export function filterCommands(query: string): SlashCommand[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return ALL_COMMANDS
+  return ALL_COMMANDS.filter(
+    (c) => c.label.toLowerCase().includes(q) || c.keywords.includes(q),
+  )
+}

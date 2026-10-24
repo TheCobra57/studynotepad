@@ -53,15 +53,15 @@ const CHEM_ROWS: CheatRow[] = [
 ]
 
 const MD_ROWS: CheatRow[] = [
-  { syntax: '# Title / ## Subtitle', note: 'Headings (also # ### levels)' },
-  { syntax: '**bold** and *italic*', note: 'Emphasis' },
-  { syntax: '- item / 1. item', note: 'Bullet and numbered lists' },
-  { syntax: '- [ ] revise topic', note: 'Checkbox list' },
-  { syntax: '> quoted callout', note: 'Blockquote' },
-  { syntax: '| A | B |\n|---|---|\n| 1 | 2 |', note: 'Table' },
-  { syntax: '---', note: 'Horizontal divider' },
-  { syntax: '`code`', note: 'Inline code' },
-  { syntax: 'Type / in the editor', note: 'Quick-insert menu (Notion style)' },
+  { syntax: 'Click any block', note: 'Edit it in place — everything else stays beautifully rendered' },
+  { syntax: 'Type / in an empty block', note: 'Quick-insert menu: headings, lists, equations, tables, formulas…' },
+  { syntax: 'Click an equation', note: 'Opens its LaTeX editor with a live preview' },
+  { syntax: 'Hover a block → ⠿ handle', note: 'Drag to reorder · click for duplicate / delete' },
+  { syntax: 'Enter / Shift+Enter', note: 'New block / line break inside a block' },
+  { syntax: 'Backspace on an empty block', note: 'Merges into the previous block' },
+  { syntax: '**bold** *italic* `code`', note: 'Inline formatting inside text (Ctrl+B / Ctrl+I / Ctrl+E)' },
+  { syntax: '$x^2 + y^2$', latex: 'x^2 + y^2', note: 'Inline math in a sentence' },
+  { syntax: '[link](https://…)', note: 'Hyperlink' },
 ]
 
 export function CheatSheet({ open, onOpenChange }: CheatSheetProps) {
@@ -69,9 +69,10 @@ export function CheatSheet({ open, onOpenChange }: CheatSheetProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Syntax cheat sheet</DialogTitle>
+          <DialogTitle>Cheat sheet</DialogTitle>
           <DialogDescription>
-            Everything you can write in a note — markdown, LaTeX math and chemistry equations.
+            Your notes render as you write. Click any block to edit it — this is what you can
+            put inside: markdown, LaTeX math and chemistry equations.
           </DialogDescription>
         </DialogHeader>
 
@@ -84,7 +85,7 @@ export function CheatSheet({ open, onOpenChange }: CheatSheetProps) {
               <Sigma className="h-3.5 w-3.5" /> Math
             </TabsTrigger>
             <TabsTrigger value="md" className="gap-1.5">
-              <FileText className="h-3.5 w-3.5" /> Markdown
+              <FileText className="h-3.5 w-3.5" /> Editor
             </TabsTrigger>
           </TabsList>
 

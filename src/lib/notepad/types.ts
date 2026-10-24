@@ -30,6 +30,4 @@ export interface NotepadBackup {
   version: 1
 }
 
-export type EditorMode = 'edit' | 'split' | 'preview'
-
 export type MobileView = 'tree' | 'notes' | 'editor'

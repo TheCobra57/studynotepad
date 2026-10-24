@@ -226,3 +226,31 @@
   @apply text-xs font-mono;
   color: var(--destructive);
 }
+
+/* ---------- WYSIWYG block editor ---------- */
+.block-inline {
+  @apply text-[15px] leading-7;
+  overflow-wrap: break-word;
+}
+.block-inline code {
+  @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[13px];
+}
+.block-inline a {
+  @apply text-primary underline underline-offset-2;
+}
+.block-inline .katex {
+  font-size: 1.05em;
+}
+.block-inline .katex-error {
+  @apply text-xs font-mono;
+  color: var(--destructive);
+}
+.block-math .katex-display {
+  margin: 0;
+}
+.block-math .katex-display > .katex {
+  white-space: normal;
+}
+.block-editor textarea::placeholder {
+  opacity: 1;
+}

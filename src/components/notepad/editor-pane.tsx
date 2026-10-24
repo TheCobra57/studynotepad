@@ -3,7 +3,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import {
-  Bold,
   BookOpen,
   Check,
   ChevronDown,
@@ -11,7 +10,6 @@ import {
   Code,
   Copy,
   Download,
-  Eye,
   FileText,
   FlaskConical,
   Heading1,
@@ -24,11 +22,9 @@ import {
   Minus,
   MoreHorizontal,
   PanelLeft,
-  Pencil,
   Pin,
   PinOff,
   Quote,
-  Radical,
   Sigma,
   Table,
   Trash2,
@@ -56,12 +52,10 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { useNotepadStore, useSelectedNote } from '@/lib/notepad/store'
-import type { EditorMode } from '@/lib/notepad/types'
 import { useToast } from '@/hooks/use-toast'
-import { useIsMobile } from '@/hooks/use-mobile'
-import { MarkdownPreview, Latex } from './markdown-preview'
-import { FORMULA_TEMPLATES, SLASH_ITEMS } from './snippets'
-import type { SlashItem } from './snippets'
+import { BlockEditor, type BlockEditorHandle } from './block-editor'
+import { FORMULA_TEMPLATES, unwrapTemplate } from './snippets'
+import { Latex } from './markdown-preview'
 
 interface EditorPaneProps {
   onBack?: () => void
@@ -75,20 +69,8 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet }: EditorPa
   const subjects = useNotepadStore((s) => s.subjects)
   const { updateNote, togglePin, deleteNote, addNote } = useNotepadStore()
   const { toast } = useToast()
-  const isMobile = useIsMobile()
-
-  const [mode, setMode] = useState<EditorMode>('split')
+  const editorRef = useRef<BlockEditorHandle>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const [slash, setSlash] = useState<{
-    start: number
-    query: string
-    items: SlashItem[]
-    activeIndex: number
-  } | null>(null)
-
-  // split view is too cramped on phones — fall back to edit there
-  const effectiveMode: EditorMode = isMobile && mode === 'split' ? 'edit' : mode
 
   const chapter = note ? chapters.find((c) => c.id === note.chapterId) : null
   const subject = chapter ? subjects.find((s) => s.id === chapter.subjectId) : null
@@ -102,129 +84,11 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet }: EditorPa
     }
   }, [note])
 
-  // ---------- text helpers ----------
-
-  const applyWrap = (prefix: string, suffix: string, placeholder: string) => {
-    const ta = textareaRef.current
-    if (!ta || !note) return
-    const { selectionStart: start, selectionEnd: end, value } = ta
-    const inner = value.slice(start, end) || placeholder
-    const next = value.slice(0, start) + prefix + inner + suffix + value.slice(end)
-    updateNote(note.id, { content: next })
-    requestAnimationFrame(() => {
-      ta.focus()
-      ta.setSelectionRange(start + prefix.length, start + prefix.length + inner.length)
-    })
-  }
-
-  const insertText = (text: string, caretFromEnd = 0, block = false) => {
-    const ta = textareaRef.current
-    if (!ta || !note) return
-    const { selectionStart: start, selectionEnd: end, value } = ta
-    let piece = text
-    if (block) {
-      const needsLeading = start > 0 && value[start - 1] !== '\n'
-      const needsTrailing = end < value.length && value[end] !== '\n'
-      piece = (needsLeading ? '\n' : '') + text + (needsTrailing ? '\n' : '')
-    }
-    const next = value.slice(0, start) + piece + value.slice(end)
-    updateNote(note.id, { content: next })
-    const caret = start + piece.length + caretFromEnd
-    requestAnimationFrame(() => {
-      ta.focus()
-      ta.setSelectionRange(caret, caret)
-    })
-  }
-
-  // ---------- slash menu ----------
-
-  const detectSlash = (value: string, caret: number) => {
-    const upToCaret = value.slice(0, caret)
-    const m = upToCaret.match(/(?:^|\n|\s)\/([\w-]*)$/)
-    if (!m) return null
-    return { start: caret - m[1].length - 1, query: m[1].toLowerCase() }
-  }
-
-  const refreshSlash = (value: string, caret: number) => {
-    const detected = detectSlash(value, caret)
-    if (!detected) {
-      setSlash(null)
-      return
-    }
-    const q = detected.query
-    const items = SLASH_ITEMS.filter(
-      (it) => it.label.toLowerCase().includes(q) || it.keywords.includes(q),
-    )
-    setSlash({ start: detected.start, query: q, items, activeIndex: 0 })
-  }
-
-  const insertSlashItem = (item: SlashItem) => {
-    const ta = textareaRef.current
-    if (!ta || !note || !slash) return
-    const { start } = slash
-    const caret = ta.selectionStart
-    const value = note.content
-    const next = value.slice(0, start) + item.insert + value.slice(caret)
-    updateNote(note.id, { content: next })
-    setSlash(null)
-    const newCaret = start + item.insert.length + (item.caretFromEnd ?? 0)
-    requestAnimationFrame(() => {
-      ta.focus()
-      ta.setSelectionRange(newCaret, newCaret)
-    })
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (slash) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setSlash((m) => (m ? { ...m, activeIndex: (m.activeIndex + 1) % m.items.length } : m))
-        return
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setSlash((m) =>
-          m ? { ...m, activeIndex: (m.activeIndex - 1 + m.items.length) % m.items.length } : m,
-        )
-        return
-      }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault()
-        const item = slash.items[slash.activeIndex]
-        if (item) insertSlashItem(item)
-        else setSlash(null)
-        return
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        setSlash(null)
-        return
-      }
-    }
-    const mod = e.metaKey || e.ctrlKey
-    if (mod && e.key.toLowerCase() === 'b') {
-      e.preventDefault()
-      applyWrap('**', '**', 'bold text')
-    } else if (mod && e.key.toLowerCase() === 'i') {
-      e.preventDefault()
-      applyWrap('*', '*', 'italic text')
-    } else if (mod && e.key.toLowerCase() === 's') {
-      e.preventDefault()
-      toast({ title: 'Saved', description: 'Your notes are saved automatically in this browser.' })
-    } else if (e.key === 'Tab') {
-      e.preventDefault()
-      insertText('  ')
-    }
-  }
-
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (!note) return
-    const value = e.target.value
-    updateNote(note.id, { content: value })
-    refreshSlash(value, e.target.selectionStart)
-  }
-
   // ---------- note actions ----------
+
+  const handleContentChange = (markdown: string) => {
+    if (note) updateNote(note.id, { content: markdown })
+  }
 
   const copyMarkdown = async () => {
     if (!note) return
@@ -246,6 +110,24 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet }: EditorPa
     a.click()
     URL.revokeObjectURL(url)
     toast({ title: 'Downloaded', description: 'Note exported as a Markdown file.' })
+  }
+
+  // ---------- toolbar helpers ----------
+
+  const tryWrap = (prefix: string, suffix: string, placeholder: string) => {
+    const ok = editorRef.current?.wrapSelection(prefix, suffix, placeholder)
+    if (!ok) {
+      toast({
+        title: 'Click into a text block first',
+        description: 'Inline formatting applies to the block you are editing.',
+      })
+    }
+  }
+
+  const insertTemplate = (insert: string) => {
+    const { tex, isBlock } = unwrapTemplate(insert)
+    if (isBlock) editorRef.current?.insertMathBlock(tex)
+    else editorRef.current?.insertInlineOrBlock(tex)
   }
 
   // ---------- render ----------
@@ -317,46 +199,6 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet }: EditorPa
           {chapter && <span className="truncate">{chapter.name}</span>}
         </div>
 
-        {/* Mode switch */}
-        <div className="flex items-center rounded-lg border p-0.5" role="tablist" aria-label="Editor mode">
-          <Button
-            variant={effectiveMode === 'edit' ? 'secondary' : 'ghost'}
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => setMode('edit')}
-            title="Edit only"
-            role="tab"
-            aria-selected={effectiveMode === 'edit'}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            <span className="sr-only">Edit</span>
-          </Button>
-          <Button
-            variant={effectiveMode === 'split' ? 'secondary' : 'ghost'}
-            size="icon"
-            className="hidden h-7 w-7 md:inline-flex"
-            onClick={() => setMode('split')}
-            title="Split view"
-            role="tab"
-            aria-selected={effectiveMode === 'split'}
-          >
-            <Eye className="h-3.5 w-3.5" />
-            <span className="sr-only">Split</span>
-          </Button>
-          <Button
-            variant={effectiveMode === 'preview' ? 'secondary' : 'ghost'}
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => setMode('preview')}
-            title="Preview only"
-            role="tab"
-            aria-selected={effectiveMode === 'preview'}
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-            <span className="sr-only">Preview</span>
-          </Button>
-        </div>
-
         {/* Note menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -399,13 +241,13 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet }: EditorPa
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={() => insertText('# ', -2)}>
+            <DropdownMenuItem onClick={() => editorRef.current?.transformActive('h1')}>
               <Heading1 className="h-4 w-4" /> Heading 1
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => insertText('## ', -3)}>
+            <DropdownMenuItem onClick={() => editorRef.current?.transformActive('h2')}>
               <Heading2 className="h-4 w-4" /> Heading 2
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => insertText('### ', -4)}>
+            <DropdownMenuItem onClick={() => editorRef.current?.transformActive('h3')}>
               <Heading3 className="h-4 w-4" /> Heading 3
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -413,37 +255,58 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet }: EditorPa
 
         <Separator orientation="vertical" className="mx-1 h-5" />
 
-        <ToolbarButton label="Bold (Ctrl+B)" onClick={() => applyWrap('**', '**', 'bold text')}>
-          <Bold className="h-4 w-4" />
+        <ToolbarButton label="Bold (Ctrl+B)" onClick={() => tryWrap('**', '**', 'bold text')}>
+          <span className="text-[13px] font-bold">B</span>
         </ToolbarButton>
-        <ToolbarButton label="Italic (Ctrl+I)" onClick={() => applyWrap('*', '*', 'italic text')}>
+        <ToolbarButton label="Italic (Ctrl+I)" onClick={() => tryWrap('*', '*', 'italic text')}>
           <Italic className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton label="Inline code (Ctrl+E)" onClick={() => tryWrap('`', '`', 'code')}>
+          <Code className="h-4 w-4" />
         </ToolbarButton>
 
         <Separator orientation="vertical" className="mx-1 h-5" />
 
-        <ToolbarButton label="Bulleted list" onClick={() => insertText('- item', -5)}>
+        <ToolbarButton
+          label="Bulleted list"
+          onClick={() => editorRef.current?.transformActive('bullet')}
+        >
           <List className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label="Numbered list" onClick={() => insertText('1. item', -5)}>
+        <ToolbarButton
+          label="Numbered list"
+          onClick={() => editorRef.current?.transformActive('numbered')}
+        >
           <ListOrdered className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label="To-do list" onClick={() => insertText('- [ ] task', -5)}>
+        <ToolbarButton
+          label="To-do list"
+          onClick={() => editorRef.current?.transformActive('todo')}
+        >
           <ListTodo className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label="Quote" onClick={() => insertText('> ', -2)}>
+        <ToolbarButton label="Quote" onClick={() => editorRef.current?.transformActive('quote')}>
           <Quote className="h-4 w-4" />
         </ToolbarButton>
 
         <Separator orientation="vertical" className="mx-1 h-5" />
 
-        <ToolbarButton label="Table" onClick={() => insertText('| Term | Meaning |\n|---|---|\n|  |  |', -3, true)}>
+        <ToolbarButton
+          label="Table"
+          onClick={() => editorRef.current?.transformActive('table')}
+        >
           <Table className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label="Code block" onClick={() => insertText('```\n\n```', -4, true)}>
+        <ToolbarButton
+          label="Code block"
+          onClick={() => editorRef.current?.transformActive('code')}
+        >
           <Code className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label="Divider" onClick={() => insertText('---', 0, true)}>
+        <ToolbarButton
+          label="Divider"
+          onClick={() => editorRef.current?.transformActive('divider')}
+        >
           <Minus className="h-4 w-4" />
         </ToolbarButton>
 
@@ -451,16 +314,22 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet }: EditorPa
 
         <ToolbarButton
           label="Inline math — $…$"
-          onClick={() => applyWrap('$', '$', 'x^2')}
+          onClick={() => tryWrap('$', '$', 'x^2')}
           className="font-serif"
+        >
+          <span className="font-serif text-[15px]">x</span>
+        </ToolbarButton>
+        <ToolbarButton
+          label="Equation block"
+          onClick={() => editorRef.current?.insertMathBlock()}
         >
           <Sigma className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
-          label="Math block — $$…$$"
-          onClick={() => insertText('$$\nE = mc^2\n$$', -4, true)}
+          label="Chemical equation"
+          onClick={() => editorRef.current?.insertMathBlock('\\ce{}', -1)}
         >
-          <Radical className="h-4 w-4" />
+          <FlaskConical className="h-4 w-4 text-amber-600 dark:text-amber-400" />
         </ToolbarButton>
 
         {/* Formula templates */}
@@ -485,7 +354,7 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet }: EditorPa
               <DropdownMenuItem
                 key={t.id}
                 className="flex items-center justify-between gap-3"
-                onClick={() => insertText(t.insert)}
+                onClick={() => insertTemplate(t.insert)}
               >
                 <span className="text-xs">{t.label}</span>
                 <Latex tex={t.preview} className="text-muted-foreground" />
@@ -499,7 +368,7 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet }: EditorPa
               <DropdownMenuItem
                 key={t.id}
                 className="flex items-center justify-between gap-3"
-                onClick={() => insertText(t.insert)}
+                onClick={() => insertTemplate(t.insert)}
               >
                 <span className="text-xs">{t.label}</span>
                 <Latex tex={t.preview} className="text-muted-foreground" />
@@ -534,87 +403,15 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet }: EditorPa
         />
       </div>
 
-      {/* Body */}
-      <div className="flex min-h-0 flex-1">
-        {effectiveMode !== 'preview' && (
-          <div
-            className={cn(
-              'relative flex min-w-0 flex-col',
-              effectiveMode === 'split' ? 'w-1/2' : 'w-full',
-            )}
-          >
-            <textarea
-              ref={textareaRef}
-              value={note.content}
-              onChange={handleChange}
-              onKeyDown={handleKeyDown}
-              onClick={() => setSlash(null)}
-              placeholder={'Start writing…\n\nType / for quick insert\n$…$ for math   •   \\ce{} for chemistry'}
-              spellCheck={false}
-              className="min-h-0 flex-1 resize-none bg-transparent px-4 py-4 text-[15px] leading-7 outline-none placeholder:text-muted-foreground/60 md:px-6"
-              aria-label="Note content"
-            />
-
-            {/* Slash quick-insert menu */}
-            {slash && (
-              <div
-                className="absolute left-4 top-2 z-30 w-72 overflow-hidden rounded-lg border bg-popover shadow-lg"
-                onMouseDown={(e) => e.preventDefault()}
-                role="listbox"
-                aria-label="Quick insert"
-              >
-                <div className="max-h-72 overflow-y-auto p-1">
-                  {slash.items.length === 0 ? (
-                    <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-                      No matches for “/{slash.query}”
-                    </p>
-                  ) : (
-                    slash.items.map((item, i) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        role="option"
-                        aria-selected={i === slash.activeIndex}
-                        onClick={() => insertSlashItem(item)}
-                        className={cn(
-                          'flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left transition-colors',
-                          i === slash.activeIndex ? 'bg-accent' : 'hover:bg-accent/60',
-                        )}
-                      >
-                        <span className="text-sm font-medium">{item.label}</span>
-                        {item.hint && (
-                          <span className="text-xs text-muted-foreground">{item.hint}</span>
-                        )}
-                      </button>
-                    ))
-                  )}
-                </div>
-                <div className="border-t bg-muted/50 px-3 py-1.5 text-[11px] text-muted-foreground">
-                  ↑↓ navigate · ↵ insert · esc close
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {effectiveMode === 'split' && <div className="w-px shrink-0 bg-border" aria-hidden />}
-
-        {effectiveMode !== 'edit' && (
-          <div
-            className={cn(
-              'min-w-0 overflow-y-auto px-4 py-4 md:px-6',
-              effectiveMode === 'split' ? 'w-1/2' : 'w-full',
-            )}
-          >
-            {note.content.trim() ? (
-              <MarkdownPreview content={note.content} />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Nothing to preview yet — start typing on the left.
-              </p>
-            )}
-          </div>
-        )}
+      {/* Body — WYSIWYG block editor */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 md:px-6">
+        <BlockEditor
+          key={note.id}
+          ref={editorRef}
+          noteId={note.id}
+          content={note.content}
+          onChange={handleContentChange}
+        />
       </div>
 
       {/* Stats bar */}

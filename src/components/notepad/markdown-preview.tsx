@@ -42,6 +42,23 @@ export function MarkdownPreview({ content, className }: { content: string; class
   )
 }
 
+/** Renders a single line of inline markdown (bold, links, `code`, $math$) without block margins */
+export function InlineMarkdown({ text }: { text: string }) {
+  return (
+    <span className="block-inline">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[
+          [rehypeKatex, { strict: false, throwOnError: false, errorColor: '#e11d48' }],
+        ]}
+        components={{ p: ({ children }) => <>{children}</> }}
+      >
+        {text}
+      </ReactMarkdown>
+    </span>
+  )
+}
+
 /** Renders a single LaTeX/chemistry string, e.g. `\ce{2H2 + O2 -> 2H2O}` */
 export function Latex({ tex, display = false, className }: { tex: string; display?: boolean; className?: string }) {
   const html = useMemo(() => {

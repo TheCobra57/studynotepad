@@ -67,3 +67,30 @@ Work Log:
 
 Stage Summary:
 - All golden-path flows browser-verified; app interactive and runnable; lint clean; dev server healthy on :3000
+
+---
+Task ID: 5
+Agent: main (Z.ai Code)
+Task: Replace edit/split/preview modes with a true Notion-style WYSIWYG editor — click any block to edit it in place (no raw markdown/LaTeX "behind the scenes"), "/" command menu to insert anything
+
+Work Log:
+- New src/lib/notepad/blocks.ts — block model: 12 block types (p/h1-h3/bullet/numbered/todo/quote/code/divider/math/table), markdown ⇄ blocks parser + serializer (handles $$…$$ single+multi-line, fences, tables, lists, todos), autoResize helper
+- snippets.ts rewritten: BLOCK_COMMANDS (14 slash commands as block transforms / inline inserts) + FORMULA_TEMPLATES (kept) exposed as TEMPLATE_COMMANDS with live LaTeX previews; unwrapTemplate helper
+- New slash-menu.tsx: reusable command palette (icons per command, live-rendered equation previews in items, flip-up near viewport bottom, scroll-into-view keyboard highlight)
+- New block-editor.tsx (~1250 lines): the WYSIWYG core —
+  • every block renders rich by default; clicking swaps THAT block into an in-place editor (auto-growing textarea with matching typography)
+  • math blocks render centered KaTeX/mhchem; click → LaTeX editor with LIVE preview + \ce{} hint + Done button (Enter/Esc commit)
+  • code/table blocks: source editor + live rendered preview; todo blocks: clickable checkboxes; quote/bullet/numbered styled like Notion
+  • "/" opens command menu (typed queries filter; ↑↓/Enter/Esc; strip typed "/query" on insert; empty-paragraph transforms in place, else inserts below; \ce{} pre-filled with caret inside braces)
+  • keyboard: Enter splits block at caret (lists continue), Shift+Enter newline, Backspace merges/converts/exits lists, arrows jump between blocks, Ctrl+B/I/E wrap selection, Ctrl+Enter toggles todo
+  • hover gutter: "+" (insert + open menu) and ⠿ drag handle (HTML5 drag reorder with drop indicator) + dropdown (move up/down/duplicate/delete)
+  • click-to-append zone at bottom; click-away deactivation; blur-retention when focus moves to toolbar/menus so toolbar acts on the right block
+  • persistence: blocks → markdown debounced 600ms into existing zustand store (note.content stays markdown → old notes/backups/seed keep working), flush on unmount/beforeunload; re-parse guard for external content changes (import)
+- editor-pane.tsx rewritten: removed edit/split/preview mode switch + monospace textarea; new toolbar (H1-3, B/I/code, lists/todo/quote/table/code/divider, inline x, Σ equation, ⚗ chemical w/ caret inside \ce{}, Formulas dropdown) driving the editor via useImperativeHandle ref
+- cheat-sheet: third tab → "Editor" (click-to-edit, /, drag handle, Enter/Backspace behaviours); types.ts: EditorMode removed; globals.css: .block-inline/.block-math styles
+- Bugs fixed during browser verification: Enter-split didn't move focus (missing setActiveId on new block); toolbar transforms landed on wrong block (blur deactivated it — fixed via relatedTarget check + document pointerdown click-away)
+- Browser-verified (agent-browser + VLM): rendered-only view (0 raw code), click-to-edit, / + /chem + /to filtering, keyboard nav, chem equation insert w/ live preview + commit, template insert (quadratic w/ fraction), H1/H2 toolbar transforms, todo create/continue/toggle + strikethrough, duplicate, Backspace merge, click-away, persistence across reload, mobile 390px (editor + footer + safe-area), dark mode, clean console, lint 0 errors
+
+Stage Summary:
+- App is now a genuine WYSIWYG Notion-like editor: notes always look rendered; you edit in place; "/" inserts anything (incl. rendered equations/chemistry with live preview)
+- localStorage format unchanged (markdown) — no migration needed; all previous flows (search, export, import, seeds) intact
