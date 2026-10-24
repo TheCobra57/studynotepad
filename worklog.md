@@ -134,3 +134,20 @@ Work Log:
 Stage Summary:
 - Project deploys to Vercel with zero config: GitHub import → Framework preset auto-detects Next.js → Deploy; no env vars, no database
 - Key caveat communicated to user: localStorage data is per-browser/per-device (no sync) — use built-in Export/Import for backup/transfer
+
+---
+Task ID: 8
+Agent: main (Z.ai Code)
+Task: Enable GitHub Pages hosting (user asked since app is static client-side)
+
+Work Log:
+- Verified export compatibility: page.tsx is 'use client', no next/image / useSearchParams / 'use server' anywhere, nothing imports @/lib/db
+- Deleted unused scaffold API route src/app/api/ (route handlers cannot be statically exported)
+- next.config.ts: output:'export' + basePath from NEXT_PUBLIC_BASE_PATH env (empty by default) + images.unoptimized
+- layout.tsx: favicon path now prefixed with basePath (metadata icons are NOT auto-prefixed by Next)
+- Created .github/workflows/deploy.yml — push to main → setup-bun → bun install --frozen-lockfile → next build with NEXT_PUBLIC_BASE_PATH=/<repo-name> → .nojekyll → upload-pages-artifact → deploy-pages
+- Dev server auto-restarted on config change; GET / → 200, output:'export' does not affect next dev
+
+Stage Summary:
+- Same codebase now deploys to BOTH Vercel (basePath empty, static) and GitHub Pages (basePath=/<repo> via Actions) with zero manual edits
+- User must set repo Settings → Pages → Source: "GitHub Actions" once; repo must be public on free plan
