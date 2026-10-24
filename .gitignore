@@ -52,3 +52,14 @@ prompt
 server.log
 # Skills directory
 /skills/
+# --- sandbox-only files (not needed on GitHub) ---
+/Caddyfile
+/db/
+/download/
+/upload/
+/tests/
+/examples/
+/mini-services/
+/.zscripts/
+/worklog.md
+/agent-ctx/

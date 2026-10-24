@@ -151,3 +151,17 @@ Work Log:
 Stage Summary:
 - Same codebase now deploys to BOTH Vercel (basePath empty, static) and GitHub Pages (basePath=/<repo> via Actions) with zero manual edits
 - User must set repo Settings → Pages → Source: "GitHub Actions" once; repo must be public on free plan
+
+---
+Task ID: 9
+Agent: main (Z.ai Code)
+Task: Advise user what to upload to GitHub (full workspace vs specific files)
+
+Work Log:
+- Appended sandbox-only entries to .gitignore: /Caddyfile /db/ /download/ /upload/ /tests/ /examples/ /mini-services/ /.zscripts/ /worklog.md /agent-ctx/
+- Noted repo has NO remote (sandbox checkpoints only) → user creates fresh GitHub repo
+- Dry-ran a fresh clone + git rm -r --cached . + git add -A to simulate the user's first push: 88 files (src/, public/, .github/workflows/deploy.yml, all configs, bun.lock, .gitignore) — node_modules, .next, .env, logs, sandbox dirs correctly excluded
+
+Stage Summary:
+- Answer: upload the whole project folder; .gitignore does the filtering; never node_modules/.next/.env
+- bun.lock must be included (workflow runs bun install --frozen-lockfile)
