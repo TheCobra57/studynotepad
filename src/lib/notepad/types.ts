@@ -31,3 +31,7 @@ export interface NotepadBackup {
 }
 
 export type MobileView = 'tree' | 'notes' | 'editor'
+
+/** Editor focus modes — 'area' hides the app chrome (header/panes/footer),
+ *  'fullscreen' additionally requests native browser fullscreen. */
+export type EditorFocusMode = 'off' | 'area' | 'fullscreen'

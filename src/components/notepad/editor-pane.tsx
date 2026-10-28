@@ -32,6 +32,7 @@ import {
   PinOff,
   Printer,
   Quote,
+  RectangleHorizontal,
   Sigma,
   Table,
   Trash2,
@@ -59,6 +60,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { useNotepadStore, useSelectedNote } from '@/lib/notepad/store'
+import type { EditorFocusMode } from '@/lib/notepad/types'
 import { useToast } from '@/hooks/use-toast'
 import { BlockEditor, type BlockEditorHandle } from './block-editor'
 import { FORMULA_TEMPLATES, unwrapTemplate, type ImageAction } from './snippets'
@@ -71,9 +73,10 @@ interface EditorPaneProps {
   onOpenSidebar?: () => void
   onOpenCheatSheet?: () => void
   onPrint?: () => void
-  /** true while the editor is expanded to fill the whole screen */
-  fullscreen?: boolean
-  onToggleFullscreen?: () => void
+  /** current focus mode: 'off' | 'area' (window only) | 'fullscreen' */
+  focusMode?: EditorFocusMode
+  onEnterFocus?: (mode: 'area' | 'fullscreen') => void
+  onExitFocus?: () => void
 }
 
 export function EditorPane({
@@ -81,8 +84,9 @@ export function EditorPane({
   onOpenSidebar,
   onOpenCheatSheet,
   onPrint,
-  fullscreen = false,
-  onToggleFullscreen,
+  focusMode = 'off',
+  onEnterFocus,
+  onExitFocus,
 }: EditorPaneProps) {
   const note = useSelectedNote()
   const chapters = useNotepadStore((s) => s.chapters)
@@ -291,13 +295,13 @@ export function EditorPane({
     <div className="flex h-full min-w-0 flex-col">
       {/* Top bar */}
       <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
-        {onBack && !fullscreen && (
+        {onBack && focusMode === 'off' && (
           <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden" onClick={onBack}>
             <ChevronLeft className="h-4 w-4" />
             <span className="sr-only">Back to notes</span>
           </Button>
         )}
-        {onOpenSidebar && !fullscreen && (
+        {onOpenSidebar && focusMode === 'off' && (
           <Button
             variant="ghost"
             size="icon"
@@ -325,20 +329,51 @@ export function EditorPane({
         </div>
 
         <div className="ml-auto flex items-center gap-1.5">
-          {onToggleFullscreen && (
+          {/* Focus modes — full area (window only) & true fullscreen */}
+          {onEnterFocus && focusMode === 'off' && (
             <Button
               variant="ghost"
               size="icon"
-              className={cn('h-8 w-8', fullscreen ? 'inline-flex' : 'hidden lg:inline-flex')}
-              onClick={onToggleFullscreen}
-              title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen — hide panels'}
-              aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              className="h-8 w-8"
+              onClick={() => onEnterFocus('area')}
+              title="Full area — hide panels, keep the browser window"
+              aria-label="Full area view"
             >
-              {fullscreen ? (
-                <Minimize2 className="h-4 w-4" />
-              ) : (
-                <Maximize2 className="h-4 w-4" />
-              )}
+              <RectangleHorizontal className="h-4 w-4" />
+            </Button>
+          )}
+          {onEnterFocus && focusMode !== 'fullscreen' && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden h-8 w-8 lg:inline-flex"
+              onClick={() => onEnterFocus('fullscreen')}
+              title={
+                focusMode === 'area'
+                  ? 'Go fullscreen — also hide the browser chrome'
+                  : 'Fullscreen — hide panels & browser chrome'
+              }
+              aria-label="Enter fullscreen"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </Button>
+          )}
+          {onExitFocus && focusMode !== 'off' && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={onExitFocus}
+              title={
+                focusMode === 'fullscreen'
+                  ? 'Exit fullscreen (Esc)'
+                  : 'Exit full area (Esc)'
+              }
+              aria-label={
+                focusMode === 'fullscreen' ? 'Exit fullscreen' : 'Exit full area view'
+              }
+            >
+              <Minimize2 className="h-4 w-4" />
             </Button>
           )}
 
@@ -595,11 +630,11 @@ export function EditorPane({
         </div>
       </div>
 
-      {/* Title — centred to a comfortable reading width in fullscreen */}
+      {/* Title — centred to a comfortable reading width in a focus mode */}
       <div
         className={cn(
           'shrink-0 px-4 pt-4 md:px-6',
-          fullscreen && 'mx-auto w-full max-w-3xl px-6',
+          focusMode !== 'off' && 'mx-auto w-full max-w-3xl px-6',
         )}
       >
         <Input
@@ -616,7 +651,7 @@ export function EditorPane({
       <div
         className={cn(
           'min-h-0 flex-1 overflow-y-auto px-4 py-3 md:px-6',
-          fullscreen && 'mx-auto w-full max-w-3xl px-6',
+          focusMode !== 'off' && 'mx-auto w-full max-w-3xl px-6',
         )}
       >
         <BlockEditor
