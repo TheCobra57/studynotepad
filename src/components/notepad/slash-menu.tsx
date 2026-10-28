@@ -2,12 +2,15 @@
 
 import { useEffect, useRef } from 'react'
 import {
+  Brush,
+  Clipboard,
   Code2,
   FlaskConical,
   GripHorizontal,
   Heading1,
   Heading2,
   Heading3,
+  Image,
   List,
   ListOrdered,
   ListTodo,
@@ -34,6 +37,9 @@ const ICONS: Record<CommandIcon, LucideIcon> = {
   code: Code2,
   math: Radical,
   chem: FlaskConical,
+  image: Image,
+  clipboard: Clipboard,
+  whiteboard: Brush,
 }
 
 interface SlashMenuProps {

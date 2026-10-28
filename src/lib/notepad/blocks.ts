@@ -20,16 +20,21 @@ export type BlockType =
   | 'divider'
   | 'math'
   | 'table'
+  | 'image'
 
 export interface Block {
   id: string
   type: BlockType
-  /** raw source of the block (markdown body without the type prefix, LaTeX for math, fenced content for code) */
+  /** raw source of the block (markdown body without the type prefix, LaTeX for math, fenced content for code). For images this is the alt text. */
   text: string
   /** todo blocks only */
   checked?: boolean
   /** code blocks only */
   lang?: string
+  /** image blocks only — data URL (or remote URL from imported markdown) */
+  src?: string
+  /** image blocks only — display width as a % of the content column (10–100) */
+  width?: number
 }
 
 export function newBlockId(): string {
@@ -42,11 +47,15 @@ export function newBlockId(): string {
 export function createBlock(
   type: BlockType,
   text = '',
-  opts?: { checked?: boolean; lang?: string },
+  opts?: { checked?: boolean; lang?: string; src?: string; width?: number },
 ): Block {
   const block: Block = { id: newBlockId(), type, text }
   if (type === 'todo') block.checked = opts?.checked ?? false
   if (type === 'code') block.lang = opts?.lang ?? ''
+  if (type === 'image') {
+    block.src = opts?.src ?? ''
+    block.width = opts?.width ?? 100
+  }
   return block
 }
 
@@ -81,6 +90,8 @@ const RE_TODO = /^[-*+]\s+\[([ xX])\]\s*(.*)$/
 const RE_BULLET = /^[-*+]\s+(.*)$/
 const RE_NUMBERED = /^\d+[.)]\s+(.*)$/
 const RE_DIVIDER = /^(-{3,}|\*{3,}|_{3,})$/
+/** ![alt](url "75") — the optional quoted title carries the display width in % */
+const RE_IMAGE = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/
 
 /** Parse a markdown document into blocks. Always returns at least one block. */
 export function parseMarkdownToBlocks(md: string): Block[] {
@@ -207,6 +218,21 @@ export function parseMarkdownToBlocks(md: string): Block[] {
       continue
     }
 
+    // ---- image ----
+    const img = line.match(RE_IMAGE)
+    if (img) {
+      const widthRaw = img[3] ? Number.parseInt(img[3], 10) : NaN
+      blocks.push({
+        id: newBlockId(),
+        type: 'image',
+        text: img[1],
+        src: img[2],
+        width: Number.isFinite(widthRaw) ? Math.min(100, Math.max(10, widthRaw)) : 100,
+      })
+      i++
+      continue
+    }
+
     // ---- paragraph (one line = one block, Notion-style) ----
     blocks.push({ id: newBlockId(), type: 'p', text: line })
     i++
@@ -242,6 +268,8 @@ export function serializeBlocks(blocks: Block[]): string {
         return `$$\n${b.text}\n$$`
       case 'table':
         return b.text
+      case 'image':
+        return `![${b.text}](${b.src ?? ''}${b.width !== undefined ? ` "${b.width}"` : ''})`
       default:
         return b.text
     }

@@ -13,6 +13,11 @@ export type CommandIcon =
   | 'code'
   | 'math'
   | 'chem'
+  | 'image'
+  | 'clipboard'
+  | 'whiteboard'
+
+export type ImageAction = 'upload' | 'clipboard' | 'whiteboard'
 
 export interface SlashCommand {
   id: string
@@ -31,6 +36,8 @@ export interface SlashCommand {
   inline?: string
   /** rendered LaTeX preview (for template items) */
   preview?: string
+  /** image flow — handled by the editor pane (file picker / clipboard / whiteboard) */
+  imageAction?: ImageAction
 }
 
 /** Notion-style "/" commands for the block editor */
@@ -134,6 +141,30 @@ export const BLOCK_COMMANDS: SlashCommand[] = [
     blockType: 'math',
     blockText: '\\ce{}',
     caretFromEnd: -1,
+  },
+  {
+    id: 'image',
+    label: 'Image',
+    hint: 'Upload a picture from your device',
+    keywords: 'image picture photo upload file img png jpg drawing diagram',
+    icon: 'image',
+    imageAction: 'upload',
+  },
+  {
+    id: 'image-clipboard',
+    label: 'Image from clipboard',
+    hint: 'Paste the image you copied (or just Ctrl+V)',
+    keywords: 'image clipboard paste copy screenshot snip',
+    icon: 'clipboard',
+    imageAction: 'clipboard',
+  },
+  {
+    id: 'whiteboard',
+    label: 'Whiteboard sketch',
+    hint: 'Draw with brushes and insert it into the note',
+    keywords: 'whiteboard draw sketch paint canvas pen brush annotate diagram',
+    icon: 'whiteboard',
+    imageAction: 'whiteboard',
   },
   {
     id: 'math-inline',

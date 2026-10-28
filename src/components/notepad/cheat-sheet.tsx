@@ -54,9 +54,14 @@ const CHEM_ROWS: CheatRow[] = [
 
 const MD_ROWS: CheatRow[] = [
   { syntax: 'Click any block', note: 'Edit it in place — everything else stays beautifully rendered' },
-  { syntax: 'Type / in an empty block', note: 'Quick-insert menu: headings, lists, equations, tables, formulas…' },
+  { syntax: 'Type / in an empty block', note: 'Quick-insert menu: headings, lists, equations, images, whiteboard…' },
   { syntax: 'Click an equation', note: 'Opens its LaTeX editor with a live preview' },
   { syntax: 'Hover a block → ⠿ handle', note: 'Drag to reorder · click for duplicate / delete' },
+  { syntax: 'Images → Upload / Clipboard / Whiteboard', note: 'Toolbar “Images” dropdown — or /image, /whiteboard, or just Ctrl+V' },
+  { syntax: 'Drag image files onto the note', note: 'Drop them anywhere in the note to add them' },
+  { syntax: 'Click an image', note: 'Resize with the corner handles or 25/50/75/100% presets · drag to move it' },
+  { syntax: '✎ Annotate (on a selected image)', note: 'Opens the image in the whiteboard — label it, then insert the result' },
+  { syntax: 'Whiteboard', note: '8 brush colours + custom, width 2–40px, eraser, one-step undo, image import' },
   { syntax: 'Enter / Shift+Enter', note: 'New block / line break inside a block' },
   { syntax: 'Backspace on an empty block', note: 'Merges into the previous block' },
   { syntax: '**bold** *italic* `code`', note: 'Inline formatting inside text (Ctrl+B / Ctrl+I / Ctrl+E)' },

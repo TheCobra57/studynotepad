@@ -255,6 +255,41 @@
   opacity: 1;
 }
 
+/* ---------- image blocks ---------- */
+.block-img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  border-radius: 8px;
+}
+figure[data-image-ui] {
+  margin: 0;
+}
+/* markdown images sized via the "75" title convention */
+.markdown-body .md-sized-img {
+  display: block;
+  height: auto;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------- whiteboard ---------- */
+.whiteboard-canvas {
+  touch-action: none;
+  cursor: crosshair;
+  aspect-ratio: 1600 / 1000;
+  background: #fff;
+}
+
+/* toolbar rows scroll horizontally when narrow — without visible scrollbars */
+.toolbar-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.toolbar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* ---------- Print pipeline (dialog preview + @media print share these) ---------- */
 
 /* on screen the print root is hidden; while printing it is the only visible node */
@@ -428,6 +463,11 @@
 }
 .print-content img {
   max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0.8em auto;
+  border-radius: 6px;
+  break-inside: avoid-page;
 }
 .print-content .katex {
   font-size: 1.05em;

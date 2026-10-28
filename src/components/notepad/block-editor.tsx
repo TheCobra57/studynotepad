@@ -10,7 +10,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react'
-import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Copy, GripVertical, PenTool, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -32,9 +32,10 @@ import {
   type Block,
   type BlockType,
 } from '@/lib/notepad/blocks'
-import { filterCommands, type SlashCommand } from './snippets'
+import { filterCommands, type ImageAction, type SlashCommand } from './snippets'
 import { SlashMenu } from './slash-menu'
 import { InlineMarkdown, Latex, MarkdownPreview } from './markdown-preview'
+import { processImageFile } from '@/lib/notepad/image'
 
 // ---------------------------------------------------------------------------
 
@@ -47,6 +48,12 @@ export interface BlockEditorHandle {
   insertInlineOrBlock: (tex: string) => void
   /** wrap the current textarea selection with markers — returns false when no text block is active */
   wrapSelection: (prefix: string, suffix: string, placeholder: string) => boolean
+  /** insert one image (data URL) at the pending/active position */
+  insertImage: (src: string) => void
+  /** insert several images (data URLs) in order */
+  insertImages: (srcs: string[]) => void
+  /** swap the src of an existing image block (whiteboard annotation flow) */
+  replaceImage: (blockId: string, src: string) => void
   /** focus the last block for quick typing */
   focusEnd: () => void
 }
@@ -55,6 +62,10 @@ interface BlockEditorProps {
   noteId: string
   content: string
   onChange: (markdown: string) => void
+  /** image flows that need app-level UI: file picker / clipboard read / whiteboard */
+  onImageAction?: (kind: ImageAction) => void
+  /** open the whiteboard pre-loaded with this image (annotation) */
+  onAnnotateImage?: (blockId: string, src: string) => void
 }
 
 interface SlashState {
@@ -89,6 +100,7 @@ const SPACING: Record<BlockType, string> = {
   divider: 'pt-2.5 pb-2.5',
   math: 'pt-1.5 pb-1.5',
   table: 'pt-1.5 pb-1.5',
+  image: 'pt-1.5 pb-1.5',
 }
 
 const LABELS: Partial<Record<BlockType, string>> = {
@@ -103,6 +115,7 @@ const LABELS: Partial<Record<BlockType, string>> = {
   code: 'code block',
   math: 'equation',
   table: 'table',
+  image: 'image',
 }
 
 function blockSpacing(type: BlockType, isFirst: boolean): string {
@@ -121,12 +134,15 @@ function blockSpacing(type: BlockType, isFirst: boolean): string {
  * Typing "/" opens the quick-insert command menu.
  */
 export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
-  function BlockEditor({ noteId, content, onChange }, ref) {
+  function BlockEditor({ noteId, content, onChange, onImageAction, onAnnotateImage }, ref) {
     const [blocks, setBlocks] = useState<Block[]>(() => parseMarkdownToBlocks(content))
     const [activeId, setActiveId] = useState<string | null>(null)
     const [slash, setSlash] = useState<SlashState | null>(null)
     const [dragIndex, setDragIndex] = useState<number | null>(null)
     const [dropIndex, setDropIndex] = useState<number | null>(null)
+    const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
+    const [imgResize, setImgResize] = useState<{ id: string; w: number } | null>(null)
+    const [fileDragOver, setFileDragOver] = useState(false)
 
     const taRefs = useRef(new Map<string, HTMLTextAreaElement>())
     const blocksRef = useRef(blocks)
@@ -136,6 +152,9 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     const onChangeRef = useRef(onChange)
     const debounceRef = useRef<number | undefined>(undefined)
     const blurTimerRef = useRef<number | undefined>(undefined)
+    const pendingImageRef = useRef<{ replaceId?: string; afterId?: string } | null>(null)
+    const onImageActionRef = useRef(onImageAction)
+    const onAnnotateImageRef = useRef(onAnnotateImage)
 
     // keep refs in sync after every render (lint-safe: no writes during render)
     useEffect(() => {
@@ -143,6 +162,8 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       activeIdRef.current = activeId
       slashRef.current = slash
       onChangeRef.current = onChange
+      onImageActionRef.current = onImageAction
+      onAnnotateImageRef.current = onAnnotateImage
     })
 
     // ------------------------------------------------------------------
@@ -212,6 +233,19 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       document.addEventListener('pointerdown', onPointerDown)
       return () => document.removeEventListener('pointerdown', onPointerDown)
     }, [activeId])
+
+    // clicking anything that is not the selected image (or its toolbar) deselects it
+    useEffect(() => {
+      if (!selectedImageId) return
+      const onPointerDown = (e: PointerEvent) => {
+        const t = e.target as HTMLElement | null
+        if (!t) return
+        if (t.closest('[data-image-ui]')) return
+        setSelectedImageId(null)
+      }
+      document.addEventListener('pointerdown', onPointerDown)
+      return () => document.removeEventListener('pointerdown', onPointerDown)
+    }, [selectedImageId])
 
     useEffect(
       () => () => {
@@ -300,6 +334,10 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           if (type === 'code' && next.lang === undefined) next.lang = ''
           if (type !== 'todo') delete next.checked
           if (type !== 'code') delete next.lang
+          if (type !== 'image') {
+            delete next.src
+            delete next.width
+          }
           return next
         }),
       )
@@ -319,6 +357,27 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       if (arr.length === 0) arr.push(createBlock('p'))
       commit(arr)
     }
+
+    // keyboard: Escape deselects, Delete/Backspace removes the selected image
+    useEffect(() => {
+      if (!selectedImageId) return
+      const onKeyDown = (e: KeyboardEvent) => {
+        const ae = document.activeElement
+        const typing =
+          ae instanceof HTMLElement &&
+          (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT' || ae.isContentEditable)
+        if (typing) return
+        if (e.key === 'Escape') {
+          setSelectedImageId(null)
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault()
+          removeBlock(selectedImageId)
+          setSelectedImageId(null)
+        }
+      }
+      document.addEventListener('keydown', onKeyDown)
+      return () => document.removeEventListener('keydown', onKeyDown)
+    }, [selectedImageId])
 
     const toggleTodo = (id: string) => {
       commit(blocksRef.current.map((b) => (b.id === id ? { ...b, checked: !b.checked } : b)))
@@ -348,6 +407,81 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       const next = ta.value.slice(0, s) + text + ta.value.slice(e)
       setBlockText(id, next)
       focusBlock(id, s + text.length)
+    }
+
+    const setBlockImageWidth = (id: string, width: number) => {
+      commit(blocksRef.current.map((b) => (b.id === id ? { ...b, width } : b)))
+    }
+
+    /**
+     * Place processed images into the document. Honours a pending anchor set
+     * by a slash command (replace the empty "…/image" paragraph, or insert
+     * after the block that typed it); otherwise replaces an empty active
+     * paragraph or inserts after the active block / at the end.
+     */
+    const insertImagesInternal = (srcs: string[]) => {
+      if (!srcs.length) return
+      const arr = [...blocksRef.current]
+      let replaceId = pendingImageRef.current?.replaceId
+      const afterPending = pendingImageRef.current?.afterId
+      pendingImageRef.current = null
+
+      if (!replaceId) {
+        const active = activeIdRef.current
+          ? arr.find((b) => b.id === activeIdRef.current)
+          : null
+        if (active && active.type === 'p' && active.text.trim() === '') {
+          replaceId = active.id
+        }
+      }
+
+      const mkImage = (src: string): Block => ({
+        id: newBlockId(),
+        type: 'image',
+        text: '',
+        src,
+        width: 100,
+      })
+
+      let first: Block
+      if (replaceId) {
+        const i = arr.findIndex((b) => b.id === replaceId)
+        if (i >= 0) {
+          first = mkImage(srcs[0])
+          arr[i] = first
+          let at = i + 1
+          for (const s of srcs.slice(1)) arr.splice(at++, 0, mkImage(s))
+          commit(arr)
+          setActiveId(null)
+          setSlash(null)
+          setSelectedImageId(first.id)
+          return
+        }
+      }
+      const anchorId = afterPending ?? activeIdRef.current
+      let idx = anchorId ? arr.findIndex((b) => b.id === anchorId) : -1
+      if (idx === -1) idx = arr.length - 1
+      first = mkImage(srcs[0])
+      arr.splice(idx + 1, 0, first)
+      let at = idx + 2
+      for (const s of srcs.slice(1)) arr.splice(at++, 0, mkImage(s))
+      commit(arr)
+      setActiveId(null)
+      setSlash(null)
+      setSelectedImageId(first.id)
+    }
+
+    /** compress image files and drop them in as image blocks */
+    const insertImageFiles = async (files: File[]) => {
+      const srcs: string[] = []
+      for (const f of files) {
+        try {
+          srcs.push((await processImageFile(f)).dataUrl)
+        } catch {
+          // unreadable file — skip it
+        }
+      }
+      if (srcs.length) insertImagesInternal(srcs)
     }
 
     const numberAt = (idx: number) => {
@@ -426,6 +560,21 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         cancelBlurDeactivate()
         setActiveId(targetId)
         focusBlock(targetId, at + cmd.inline.length)
+        return
+      }
+
+      // ---- image flows are orchestrated by the editor pane ----
+      if (cmd.imageAction) {
+        if (stripped !== target.text) setBlockText(targetId, stripped)
+        // an empty paragraph that only served as the "/" trigger is replaced
+        // by the incoming image; otherwise the image lands right below
+        if (target.type === 'p' && stripped.trim() === '') {
+          pendingImageRef.current = { replaceId: targetId }
+        } else {
+          pendingImageRef.current = { afterId: targetId }
+        }
+        setActiveId(null)
+        onImageActionRef.current?.(cmd.imageAction)
         return
       }
 
@@ -780,6 +929,24 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           activate(nb.id, 'end')
         },
         wrapSelection,
+        insertImage: (src: string) => {
+          insertImagesInternal([src])
+        },
+        insertImages: (srcs: string[]) => {
+          insertImagesInternal(srcs)
+        },
+        replaceImage: (blockId: string, src: string) => {
+          const exists = blocksRef.current.some((b) => b.id === blockId)
+          if (!exists) {
+            insertImagesInternal([src])
+            return
+          }
+          commit(
+            blocksRef.current.map((b) => (b.id === blockId ? { ...b, src } : b)),
+          )
+          setActiveId(null)
+          setSelectedImageId(blockId)
+        },
         focusEnd: () => {
           const last = blocksRef.current[blocksRef.current.length - 1]
           if (!last) return
@@ -1199,11 +1366,206 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       )
     }
 
+    // ------------------------------------------------------------------
+    // image blocks — select, resize (handles + presets), drag to move
+    // ------------------------------------------------------------------
+
+    const startImageResize = (
+      e: React.PointerEvent<HTMLElement>,
+      block: Block,
+      corner: 'nw' | 'ne' | 'sw' | 'se',
+    ) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const handleEl = e.currentTarget
+      const figure = handleEl.closest('figure')
+      const baseW = figure?.getBoundingClientRect().width ?? 600
+      const startX = e.clientX
+      const startW = block.width ?? 100
+      const dir = corner === 'ne' || corner === 'se' ? 1 : -1
+      let finalW = startW
+      setSelectedImageId(block.id)
+      handleEl.setPointerCapture(e.pointerId)
+      const onMove = (ev: PointerEvent) => {
+        const pct = startW + ((ev.clientX - startX) / baseW) * 100 * dir
+        finalW = Math.round(Math.min(100, Math.max(10, pct)))
+        setImgResize({ id: block.id, w: finalW })
+      }
+      const finish = () => {
+        handleEl.removeEventListener('pointermove', onMove)
+        handleEl.removeEventListener('pointerup', finish)
+        handleEl.removeEventListener('pointercancel', finish)
+        setImgResize(null)
+        setBlockImageWidth(block.id, finalW)
+      }
+      handleEl.addEventListener('pointermove', onMove)
+      handleEl.addEventListener('pointerup', finish)
+      handleEl.addEventListener('pointercancel', finish)
+    }
+
+    const renderImage = (block: Block, idx: number): ReactNode => {
+      const selected = selectedImageId === block.id
+      const w = imgResize?.id === block.id ? imgResize.w : (block.width ?? 100)
+      return (
+        <figure
+          data-image-ui
+          className="group/image relative"
+          onPointerDown={() => {
+            cancelBlurDeactivate()
+            setSelectedImageId(block.id)
+          }}
+        >
+          <img
+            src={block.src}
+            alt={block.text || 'Image'}
+            draggable
+            onDragStart={(e) => handleDragStart(e, idx)}
+            onDragEnd={handleDragEnd}
+            style={{ width: `${w}%` }}
+            className="block-img mx-auto cursor-grab select-none rounded-lg active:cursor-grabbing"
+          />
+
+          {selected && (
+            <>
+              {/* selection frame hugging the image */}
+              <div
+                className="pointer-events-none absolute inset-y-0 left-0 right-0 mx-auto rounded-lg ring-2 ring-primary"
+                style={{ width: `${w}%` }}
+              >
+                {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
+                  <span
+                    key={corner}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Resize image (${corner} corner)`}
+                    onPointerDown={(e) => startImageResize(e, block, corner)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setBlockImageWidth(
+                          block.id,
+                          Math.min(100, Math.max(10, (block.width ?? 100) + (corner === 'nw' || corner === 'sw' ? -10 : 10))),
+                        )
+                      }
+                    }}
+                    className={cn(
+                      'pointer-events-auto absolute h-3.5 w-3.5 rounded-sm border-2 border-primary bg-background shadow-sm',
+                      corner === 'nw' && 'left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize',
+                      corner === 'se' && 'bottom-0 right-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize',
+                      corner === 'ne' && 'right-0 top-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize',
+                      corner === 'sw' && 'bottom-0 left-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize',
+                    )}
+                  />
+                ))}
+              </div>
+
+              {/* floating size toolbar */}
+              <div
+                data-image-ui
+                className="absolute -top-10 left-1/2 z-30 -translate-x-1/2"
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-lg">
+                  {[25, 50, 75, 100].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setBlockImageWidth(block.id, p)}
+                      className={cn(
+                        'h-7 rounded-md px-2 text-[11px] font-medium tabular-nums transition-colors',
+                        Math.round(w) === p
+                          ? 'bg-accent text-accent-foreground'
+                          : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+                      )}
+                    >
+                      {p}%
+                    </button>
+                  ))}
+                  <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
+                  <button
+                    type="button"
+                    title="Annotate on the whiteboard"
+                    aria-label="Annotate on the whiteboard"
+                    onClick={() => onAnnotateImageRef.current?.(block.id, block.src ?? '')}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+                  >
+                    <PenTool className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Delete image"
+                    aria-label="Delete image"
+                    onClick={() => {
+                      setSelectedImageId(null)
+                      removeBlock(block.id)
+                    }}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-destructive transition-colors hover:bg-destructive/10"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* live size readout */}
+              <span className="pointer-events-none absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] tabular-nums text-muted-foreground">
+                {Math.round(w)}% — drag a corner to resize, drag the image to move
+              </span>
+            </>
+          )}
+        </figure>
+      )
+    }
+
+    // ------------------------------------------------------------------
+    // paste & drop image handling
+    // ------------------------------------------------------------------
+
+    const handlePaste = (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      const files: File[] = []
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i]
+        if (it.kind === 'file' && it.type.startsWith('image/')) {
+          const f = it.getAsFile()
+          if (f) files.push(f)
+        }
+      }
+      if (!files.length) return // normal text paste — let the browser handle it
+      e.preventDefault()
+      void insertImageFiles(files)
+    }
+
+    const handleFileDragOver = (e: React.DragEvent) => {
+      const types = Array.from(e.dataTransfer?.types ?? [])
+      if (!types.includes('Files')) return // internal block reorder
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+      setFileDragOver(true)
+    }
+
+    const handleFileDragLeave = (e: React.DragEvent) => {
+      const related = e.relatedTarget as Node | null
+      if (related && e.currentTarget.contains(related)) return
+      setFileDragOver(false)
+    }
+
+    const handleFileDrop = (e: React.DragEvent) => {
+      setFileDragOver(false)
+      const files = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
+        f.type.startsWith('image/'),
+      )
+      if (!files.length) return // not an image drop — let block reorder finish
+      e.preventDefault()
+      void insertImageFiles(files)
+    }
+
     const renderBlock = (block: Block, idx: number): ReactNode => {
       const editing = activeId === block.id
       if (block.type === 'math') return renderMath(block, editing)
       if (block.type === 'code') return renderCode(block, editing)
       if (block.type === 'table') return renderTable(block, editing)
+      if (block.type === 'image') return renderImage(block, idx)
       if (block.type === 'divider') return <hr className="border-border" />
       return editing ? renderTextEditing(block, idx) : renderTextRendered(block, idx)
     }
@@ -1221,7 +1583,23 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     }
 
     return (
-      <div className="min-h-full" aria-label="Note content" data-block-editor>
+      <div
+        className="relative min-h-full"
+        aria-label="Note content"
+        data-block-editor
+        onPaste={handlePaste}
+        onDragOver={handleFileDragOver}
+        onDragLeave={handleFileDragLeave}
+        onDrop={handleFileDrop}
+      >
+        {/* drop-to-insert overlay while dragging image files over the note */}
+        {fileDragOver && (
+          <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-primary/5 backdrop-blur-[1px]">
+            <p className="rounded-lg bg-background/90 px-4 py-2 text-sm font-medium text-primary shadow">
+              Drop images to add them to the note
+            </p>
+          </div>
+        )}
         <div className="pb-2">
           {blocks.map((block, idx) => {
             const editing = activeId === block.id

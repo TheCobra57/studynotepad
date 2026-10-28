@@ -4,9 +4,11 @@ import { useMemo, useRef, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import {
   BookOpen,
+  Brush,
   Check,
   ChevronDown,
   ChevronLeft,
+  Clipboard,
   Code,
   Copy,
   Download,
@@ -15,6 +17,8 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  Image as ImageIcon,
+  ImagePlus,
   Italic,
   List,
   ListOrdered,
@@ -55,8 +59,10 @@ import { cn } from '@/lib/utils'
 import { useNotepadStore, useSelectedNote } from '@/lib/notepad/store'
 import { useToast } from '@/hooks/use-toast'
 import { BlockEditor, type BlockEditorHandle } from './block-editor'
-import { FORMULA_TEMPLATES, unwrapTemplate } from './snippets'
+import { FORMULA_TEMPLATES, unwrapTemplate, type ImageAction } from './snippets'
 import { Latex } from './markdown-preview'
+import { Whiteboard } from './whiteboard'
+import { LARGE_IMAGE_BYTES, formatBytes, processImageFile } from '@/lib/notepad/image'
 
 interface EditorPaneProps {
   onBack?: () => void
@@ -72,17 +78,23 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }:
   const { updateNote, togglePin, deleteNote, addNote } = useNotepadStore()
   const { toast } = useToast()
   const editorRef = useRef<BlockEditorHandle>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [whiteboardOpen, setWhiteboardOpen] = useState(false)
+  const [whiteboardInitial, setWhiteboardInitial] = useState<string | null>(null)
+  const [annotateTargetId, setAnnotateTargetId] = useState<string | null>(null)
 
   const chapter = note ? chapters.find((c) => c.id === note.chapterId) : null
   const subject = chapter ? subjects.find((s) => s.id === chapter.subjectId) : null
 
   const stats = useMemo(() => {
     if (!note) return { words: 0, chars: 0 }
-    const trimmed = note.content.trim()
+    // images are stored as data URLs in the markdown — exclude them from the stats
+    const withoutImages = note.content.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    const trimmed = withoutImages.trim()
     return {
       words: trimmed ? trimmed.split(/\s+/).length : 0,
-      chars: note.content.length,
+      chars: withoutImages.length,
     }
   }, [note])
 
@@ -132,6 +144,105 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }:
     else editorRef.current?.insertInlineOrBlock(tex)
   }
 
+  // ---------- image flows: upload / clipboard / whiteboard ----------
+
+  const warnIfLarge = (results: { bytes: number }[]) => {
+    const biggest = results.reduce((m, r) => Math.max(m, r.bytes), 0)
+    if (biggest > LARGE_IMAGE_BYTES) {
+      toast({
+        title: 'Large image stored',
+        description: `${formatBytes(biggest)} after compression — browser storage is ~5 MB, so keep an eye on it (use Export for backups).`,
+      })
+    }
+  }
+
+  const handleImageAction = (kind: ImageAction) => {
+    if (!note) return
+    if (kind === 'upload') {
+      imageInputRef.current?.click()
+      return
+    }
+    if (kind === 'whiteboard') {
+      setWhiteboardInitial(null)
+      setAnnotateTargetId(null)
+      setWhiteboardOpen(true)
+      return
+    }
+    // clipboard read (needs the async Clipboard API — a plain click can't read it)
+    void (async () => {
+      try {
+        if (!navigator.clipboard || typeof navigator.clipboard.read !== 'function') {
+          throw new Error('unsupported')
+        }
+        const items = await navigator.clipboard.read()
+        for (const item of items) {
+          const type = item.types.find((t) => t.startsWith('image/'))
+          if (!type) continue
+          const blob = await item.getType(type)
+          const processed = await processImageFile(blob)
+          editorRef.current?.insertImage(processed.dataUrl)
+          warnIfLarge([processed])
+          toast({
+            title: 'Image inserted',
+            description: `Pasted from clipboard · ${formatBytes(processed.bytes)}`,
+          })
+          return
+        }
+        toast({
+          title: 'No image in the clipboard',
+          description: 'Copy an image first — or just press Ctrl+V inside the note.',
+        })
+      } catch {
+        toast({
+          title: 'Clipboard read unavailable',
+          description: 'Click inside the note and press Ctrl+V to paste the image directly.',
+        })
+      }
+    })()
+  }
+
+  const handleImageFiles = (files: File[]) => {
+    if (!files.length || !note) return
+    void (async () => {
+      const results: { dataUrl: string; bytes: number }[] = []
+      for (const f of files) {
+        try {
+          results.push(await processImageFile(f))
+        } catch {
+          toast({
+            title: 'Could not read image',
+            description: f.name,
+            variant: 'destructive',
+          })
+        }
+      }
+      if (!results.length) return
+      editorRef.current?.insertImages(results.map((r) => r.dataUrl))
+      warnIfLarge(results)
+      toast({
+        title: results.length === 1 ? 'Image added' : `${results.length} images added`,
+        description: results.map((r) => formatBytes(r.bytes)).join(' · '),
+      })
+    })()
+  }
+
+  const handleAnnotateImage = (blockId: string, src: string) => {
+    setWhiteboardInitial(src)
+    setAnnotateTargetId(blockId)
+    setWhiteboardOpen(true)
+  }
+
+  const handleWhiteboardInsert = (dataUrl: string) => {
+    if (annotateTargetId) {
+      editorRef.current?.replaceImage(annotateTargetId, dataUrl)
+      toast({ title: 'Image updated', description: 'Whiteboard drawing replaced the image.' })
+    } else {
+      editorRef.current?.insertImage(dataUrl)
+      toast({ title: 'Sketch inserted', description: 'Your whiteboard drawing is now in the note.' })
+    }
+    setWhiteboardOpen(false)
+  }
+
   // ---------- render ----------
 
   if (!note) {
@@ -167,7 +278,7 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }:
   return (
     <div className="flex h-full min-w-0 flex-col">
       {/* Top bar */}
-      <div className="flex items-center gap-2 border-b px-3 py-2">
+      <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
         {onBack && (
           <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden" onClick={onBack}>
             <ChevronLeft className="h-4 w-4" />
@@ -243,12 +354,15 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }:
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div
-        className="flex flex-wrap items-center gap-0.5 border-b bg-muted/30 px-3 py-1.5"
-        role="toolbar"
-        aria-label="Formatting"
-      >
+      {/* Toolbar — two fixed rows (never wraps: heights stay deterministic,
+          and each row scrolls horizontally when the pane is narrow) */}
+      <div className="shrink-0 border-b bg-muted/30">
+        {/* row 1 — block structure & text formatting */}
+        <div
+          className="toolbar-scroll flex items-center gap-0.5 overflow-x-auto px-3 py-1.5"
+          role="toolbar"
+          aria-label="Formatting"
+        >
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="h-8 gap-1 px-2 font-mono text-xs">
@@ -326,9 +440,14 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }:
         >
           <Minus className="h-4 w-4" />
         </ToolbarButton>
+        </div>
 
-        <Separator orientation="vertical" className="mx-1 h-5" />
-
+        {/* row 2 — math, chemistry, images & whiteboard */}
+        <div
+          className="toolbar-scroll flex items-center gap-0.5 overflow-x-auto border-t border-border/60 px-3 py-1.5"
+          role="toolbar"
+          aria-label="Insert"
+        >
         <ToolbarButton
           label="Inline math — $…$"
           onClick={() => tryWrap('$', '$', 'x^2')}
@@ -394,6 +513,44 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }:
           </DropdownMenuContent>
         </DropdownMenu>
 
+        {/* Image insert dropdown — upload / clipboard / whiteboard */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 px-2 text-xs"
+              title="Insert an image"
+            >
+              <ImageIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              Images
+              <ChevronDown className="h-3 w-3 opacity-60" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-60">
+            <DropdownMenuItem onClick={() => handleImageAction('upload')}>
+              <ImagePlus className="h-4 w-4" />
+              <span className="flex-1">Upload image…</span>
+              <span className="text-[10px] text-muted-foreground">file</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleImageAction('clipboard')}>
+              <Clipboard className="h-4 w-4" />
+              <span className="flex-1">Paste from clipboard</span>
+              <span className="text-[10px] text-muted-foreground">Ctrl+V</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleImageAction('whiteboard')}>
+              <Brush className="h-4 w-4" />
+              <span className="flex-1">Draw on whiteboard…</span>
+              <span className="text-[10px] text-muted-foreground">sketch</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <p className="px-2 pb-1.5 text-[11px] leading-snug text-muted-foreground">
+              You can also drag &amp; drop image files onto the note, or just press Ctrl+V while
+              writing.
+            </p>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <div className="ml-auto flex items-center">
           <Button
             variant="ghost"
@@ -406,10 +563,11 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }:
             <span className="hidden md:inline">Cheat sheet</span>
           </Button>
         </div>
+        </div>
       </div>
 
       {/* Title */}
-      <div className="px-4 pt-4 md:px-6">
+      <div className="shrink-0 px-4 pt-4 md:px-6">
         <Input
           value={note.title}
           onChange={(e) => updateNote(note.id, { title: e.target.value })}
@@ -428,11 +586,13 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }:
           noteId={note.id}
           content={note.content}
           onChange={handleContentChange}
+          onImageAction={handleImageAction}
+          onAnnotateImage={handleAnnotateImage}
         />
       </div>
 
       {/* Stats bar */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t px-4 py-2 text-[11px] text-muted-foreground md:px-6">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t px-4 py-2 text-[11px] text-muted-foreground md:px-6">
         <span className="tabular-nums">{stats.words} words</span>
         <span className="tabular-nums">{stats.chars} characters</span>
         <span className="ml-auto inline-flex items-center gap-1">
@@ -443,6 +603,36 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }:
           Updated {formatDistanceToNow(new Date(note.updatedAt), { addSuffix: true })}
         </span>
       </div>
+
+      {/* Whiteboard — draw & insert (also used to annotate images) */}
+      <Whiteboard
+        open={whiteboardOpen}
+        onOpenChange={(open) => {
+          setWhiteboardOpen(open)
+          if (!open) {
+            setWhiteboardInitial(null)
+            setAnnotateTargetId(null)
+          }
+        }}
+        onInsert={handleWhiteboardInsert}
+        initialImage={whiteboardInitial}
+      />
+
+      {/* Hidden image file input (upload flow) */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        data-image-upload
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith('image/'))
+          e.target.value = '' // allow picking the same file again
+          handleImageFiles(files)
+        }}
+        aria-label="Upload images"
+      />
 
       {/* Delete confirmation */}
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>

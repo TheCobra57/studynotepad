@@ -165,3 +165,36 @@ Work Log:
 Stage Summary:
 - Answer: upload the whole project folder; .gitignore does the filtering; never node_modules/.next/.env
 - bun.lock must be included (workflow runs bun install --frozen-lockfile)
+
+---
+Task ID: 10
+Agent: main (Z.ai Code)
+Task: Images + whiteboard feature — positionable/resizable/paste-able images, whiteboard with brushes/eraser/1-step undo, "Images" dropdown (upload / clipboard / whiteboard)
+
+Work Log:
+- New src/lib/notepad/image.ts — processImageFile (downscale ≤1600px, best-of PNG vs JPEG q0.85 w/ white flatten), canvasToDataUrl, processDataUrl, formatBytes, LARGE_IMAGE_BYTES warn threshold
+- blocks.ts: 'image' block type (text=alt, src=data URL, width=10–100%). Markdown convention ![alt](src "75") — width rides in the image title; parser/serializer round-trip; transformBlock cleans src/width
+- block-editor.tsx (~450 lines added):
+  • renderImage: click selects → ring frame + 4 corner resize handles (pointer-capture drag, live % readout, commit on release) + floating toolbar (25/50/75/100% presets, ✎ Annotate, 🗑 Delete)
+  • image is draggable → reuses the block drag/reorder machinery (drop indicator, move up/down/duplicate/delete via gutter menu); Delete/Backspace removes selected image, Esc deselects, click-away deselects (document pointerdown [data-image-ui] guard)
+  • paste handler (ClipboardEvent image files → blocks), file drag-over overlay ("Drop images…") + drop handler
+  • insertImagesInternal: honours pendingImage anchor from slash commands (empty "/image" paragraph replaced), else replaces empty active paragraph / inserts after active / appends
+  • imperative: insertImage, insertImages, replaceImage; props onImageAction + onAnnotateImage
+  • applyCommand imageAction branch strips "/query" and delegates to editor pane
+- snippets.ts: 3 slash commands (/image upload, /image-clipboard, /whiteboard) + ImageAction type; slash-menu icons (Image, Clipboard, Brush)
+- markdown-preview.tsx: custom img renderer reads "75" title → width%; urlTransform allows data:image/* (react-markdown strips data: URLs by default — print would have lost every image!)
+- New whiteboard.tsx (~430 lines): Dialog w/ 1600×1000 canvas; 8 colour swatches + custom colour input; width slider 2–40px w/ live dot preview; eraser (white paint); single-step undo (snapshot before each stroke/clear/import, spent on use); clear; image import (contain-fit) for annotation; Insert → compressed data URL → note. Radix mounts portal content a commit AFTER open → rAF-retry init (white fill + initialImage preload)
+- editor-pane.tsx: Images dropdown (Upload / Paste from clipboard / Draw on whiteboard + hint); hidden file input (data-image-upload); clipboard read via navigator.clipboard.read() w/ graceful toasts; whiteboard mount w/ annotate flow (replaceImage on insert); stats exclude image markdown
+- globals.css: .block-img, .md-sized-img, .whiteboard-canvas (touch-action none), .toolbar-scroll (hidden scrollbars), print img rules (centered, break-inside avoid)
+- cheat-sheet: 5 new Editor rows documenting images/whiteboard/annotate
+- BUGS FOUND & FIXED during browser verification:
+  • Toolbar flex-wrap intrinsic-height bug (Chromium measured 2 rows, laid out 3; third row overlapped the title) → toolbar restructured into TWO fixed non-wrapping rows with overflow-x-auto + shrink-0 on all editor chrome
+  • Radix dialog canvas not mounted when open-effect ran → canvas stayed transparent (no white fill / no preload) → rAF retry loop
+  • react-markdown defaultUrlTransform stripped data: URLs → empty src in print preview/PDF → urlTransform override allowing data:image/*
+- Browser-verified (agent-browser + VLM + pixel probes): upload→compress→render (480px PNG stored); select→50% preset→persisted "50"; real mouse handle-drag 50%→69% persisted; /whiteboard slash (strip + empty-paragraph replace); whiteboard draw (black V + red strokes, VLM confirmed), colour switch, undo (red stroke removed, one-step, button disabled after), insert→JPEG sketch in note; annotate flow (image preloaded on board — pixel-verified 41k coloured px, red stroke added, insert REPLACED the block in place, count stayed 2); synthetic ClipboardEvent paste → new image; DragEvent drag-over overlay shows/hides + drop inserts; gutter Move-up reorder; print dialog: 3 sheets, 4 images distributed 1/1/2 all loaded, width % respected, PDF via print pipeline contains 4 /Image XObjects; persistence across reload (4 images + "69" width); mobile 390px: no overflow, 2-row toolbar, whiteboard canvas 340×213 fits, dropdown works; clean session console 0 errors; lint 0 errors
+- Cleanup: all 4 test images + test text removed from note via UI (Delete image buttons + textarea selection delete) — data back to seed state (8 notes, 4 subjects)
+
+Stage Summary:
+- Images: upload (file picker, multi), clipboard (dropdown read + direct Ctrl+V + synthetic-paste verified), drag-drop files, click-select, corner-drag + preset resize (10–100%, % of column), drag-to-reposition (shared block DnD), annotate-in-whiteboard (replace), delete (toolbar/key/menu)
+- Whiteboard: 8 colours + custom, 2–40px width, eraser, exactly-1-step undo, clear, image import, insert-to-note — same compressed storage pipeline
+- Print parity maintained: images render in preview + real PDF at the same relative widths (width title convention shared by editor & markdown renderer)
