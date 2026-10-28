@@ -227,6 +227,35 @@
   color: var(--destructive);
 }
 
+/* ---------- Table of contents ([TOC]) ---------- */
+.markdown-body .toc-block {
+  @apply my-4 overflow-hidden rounded-lg border bg-muted/30;
+}
+.markdown-body .toc-block .toc-title {
+  @apply m-0 border-b bg-muted/50 px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground;
+}
+.markdown-body .toc-block ul {
+  @apply m-0 list-none space-y-0 p-0;
+}
+.markdown-body .toc-block li {
+  margin: 0;
+}
+.markdown-body .toc-block li a {
+  @apply block px-3.5 py-1 text-sm leading-6 text-foreground/80 underline-offset-2;
+}
+.markdown-body .toc-block li a:hover {
+  @apply bg-accent text-foreground;
+}
+.markdown-body .toc-block li.toc-l2 a {
+  padding-left: 2rem;
+}
+.markdown-body .toc-block li.toc-l3 a {
+  padding-left: 3.25rem;
+}
+.markdown-body .toc-block.toc-empty {
+  @apply px-3.5 py-3 text-sm italic text-muted-foreground;
+}
+
 /* ---------- WYSIWYG block editor ---------- */
 .block-inline {
   @apply text-[15px] leading-7;
@@ -460,6 +489,51 @@ figure[data-image-ui] {
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+/* table of contents on paper: plain list look, links stay tappable in PDFs */
+.print-content .toc-block {
+  margin: 1em 0;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #f9fafb;
+  break-inside: avoid-page;
+}
+.print-content .toc-block .toc-title {
+  margin: 0;
+  padding: 0.55em 1em;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6b7280;
+  background: #f3f4f6;
+}
+.print-content .toc-block ul {
+  margin: 0;
+  padding: 0.45em 0 0.6em;
+  list-style: none;
+}
+.print-content .toc-block li a {
+  display: block;
+  padding: 0.14em 1em;
+  font-size: 0.92em;
+  line-height: 1.45;
+  text-decoration: none;
+}
+.print-content .toc-block li.toc-l2 a {
+  padding-left: 2.1em;
+}
+.print-content .toc-block li.toc-l3 a {
+  padding-left: 3.2em;
+}
+.print-content .toc-block li a:hover {
+  background: transparent;
+}
+.print-content .toc-block.toc-empty {
+  padding: 0.7em 1em;
+  font-style: italic;
+  color: #6b7280;
 }
 .print-content img {
   max-width: 100%;

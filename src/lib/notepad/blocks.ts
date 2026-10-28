@@ -21,6 +21,7 @@ export type BlockType =
   | 'math'
   | 'table'
   | 'image'
+  | 'toc'
 
 export interface Block {
   id: string
@@ -92,6 +93,8 @@ const RE_NUMBERED = /^\d+[.)]\s+(.*)$/
 const RE_DIVIDER = /^(-{3,}|\*{3,}|_{3,})$/
 /** ![alt](url "75") — the optional quoted title carries the display width in % */
 const RE_IMAGE = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/
+/** `[TOC]` — auto-generated table of contents (case-insensitive) */
+const RE_TOC = /^\[TOC\]$/i
 
 /** Parse a markdown document into blocks. Always returns at least one block. */
 export function parseMarkdownToBlocks(md: string): Block[] {
@@ -158,6 +161,13 @@ export function parseMarkdownToBlocks(md: string): Block[] {
     // ---- divider ----
     if (RE_DIVIDER.test(line)) {
       blocks.push(createBlock('divider'))
+      i++
+      continue
+    }
+
+    // ---- table of contents marker ([TOC]) ----
+    if (RE_TOC.test(line)) {
+      blocks.push(createBlock('toc'))
       i++
       continue
     }
@@ -264,6 +274,8 @@ export function serializeBlocks(blocks: Block[]): string {
         return `\`\`\`${b.lang ?? ''}\n${b.text}\n\`\`\``
       case 'divider':
         return '---'
+      case 'toc':
+        return '[TOC]'
       case 'math':
         return `$$\n${b.text}\n$$`
       case 'table':

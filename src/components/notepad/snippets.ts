@@ -16,6 +16,7 @@ export type CommandIcon =
   | 'image'
   | 'clipboard'
   | 'whiteboard'
+  | 'toc'
 
 export type ImageAction = 'upload' | 'clipboard' | 'whiteboard'
 
@@ -65,6 +66,14 @@ export const BLOCK_COMMANDS: SlashCommand[] = [
     keywords: 'h3 heading small',
     icon: 'h3',
     blockType: 'h3',
+  },
+  {
+    id: 'toc',
+    label: 'Table of Contents',
+    hint: 'Auto list of your H1–H3 headings, with links',
+    keywords: 'toc table of contents contents index outline headings links navigation',
+    icon: 'toc',
+    blockType: 'toc',
   },
   {
     id: 'bullet',

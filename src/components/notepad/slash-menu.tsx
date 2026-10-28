@@ -14,6 +14,7 @@ import {
   List,
   ListOrdered,
   ListTodo,
+  ListTree,
   Minus,
   Quote,
   Radical,
@@ -40,6 +41,7 @@ const ICONS: Record<CommandIcon, LucideIcon> = {
   image: Image,
   clipboard: Clipboard,
   whiteboard: Brush,
+  toc: ListTree,
 }
 
 interface SlashMenuProps {

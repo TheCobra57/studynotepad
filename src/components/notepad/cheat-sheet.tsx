@@ -55,6 +55,7 @@ const CHEM_ROWS: CheatRow[] = [
 const MD_ROWS: CheatRow[] = [
   { syntax: 'Click any block', note: 'Edit it in place — everything else stays beautifully rendered' },
   { syntax: 'Type / in an empty block', note: 'Quick-insert menu: headings, lists, equations, images, whiteboard…' },
+  { syntax: '/toc — Table of Contents', note: 'Auto-built from your H1–H3 headings; click an entry to jump there (also printed)' },
   { syntax: 'Click an equation', note: 'Opens its LaTeX editor with a live preview' },
   { syntax: 'Hover a block → ⠿ handle', note: 'Drag to reorder · click for duplicate / delete' },
   { syntax: 'Images → Upload / Clipboard / Whiteboard', note: 'Toolbar “Images” dropdown — or /image, /whiteboard, or just Ctrl+V' },

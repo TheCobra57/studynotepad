@@ -10,7 +10,16 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react'
-import { ArrowDown, ArrowUp, Copy, GripVertical, PenTool, Plus, Trash2 } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  Copy,
+  GripVertical,
+  ListTree,
+  PenTool,
+  Plus,
+  Trash2,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -101,6 +110,7 @@ const SPACING: Record<BlockType, string> = {
   math: 'pt-1.5 pb-1.5',
   table: 'pt-1.5 pb-1.5',
   image: 'pt-1.5 pb-1.5',
+  toc: 'pt-1.5 pb-1.5',
 }
 
 const LABELS: Partial<Record<BlockType, string>> = {
@@ -116,6 +126,7 @@ const LABELS: Partial<Record<BlockType, string>> = {
   math: 'equation',
   table: 'table',
   image: 'image',
+  toc: 'table of contents',
 }
 
 function blockSpacing(type: BlockType, isFirst: boolean): string {
@@ -143,6 +154,8 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
     const [imgResize, setImgResize] = useState<{ id: string; w: number } | null>(null)
     const [fileDragOver, setFileDragOver] = useState(false)
+    /** heading block briefly highlighted after a ToC link jump */
+    const [flashId, setFlashId] = useState<string | null>(null)
 
     const taRefs = useRef(new Map<string, HTMLTextAreaElement>())
     const blocksRef = useRef(blocks)
@@ -155,6 +168,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     const pendingImageRef = useRef<{ replaceId?: string; afterId?: string } | null>(null)
     const onImageActionRef = useRef(onImageAction)
     const onAnnotateImageRef = useRef(onAnnotateImage)
+    const flashTimerRef = useRef<number | undefined>(undefined)
 
     // keep refs in sync after every render (lint-safe: no writes during render)
     useEffect(() => {
@@ -250,6 +264,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     useEffect(
       () => () => {
         if (blurTimerRef.current !== undefined) window.clearTimeout(blurTimerRef.current)
+        if (flashTimerRef.current !== undefined) window.clearTimeout(flashTimerRef.current)
       },
       [],
     )
@@ -311,7 +326,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       }, 140)
     }
 
-    const activate = (id: string, caret: 'start' | 'end' = 'end') => {
+    const activate = (id: string, caret: 'start' | 'end' | number = 'end') => {
       cancelBlurDeactivate()
       setActiveId(id)
       focusBlock(id, caret)
@@ -490,6 +505,96 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       return n
     }
 
+    // ------------------------------------------------------------------
+    // table of contents block
+    // ------------------------------------------------------------------
+
+    /** live heading list — H1–H3 blocks, in document order */
+    const tocEntries = useMemo(
+      () =>
+        blocks
+          .filter((b) => b.type === 'h1' || b.type === 'h2' || b.type === 'h3')
+          .map((b) => ({
+            id: b.id,
+            level: (b.type === 'h1' ? 1 : b.type === 'h2' ? 2 : 3) as 1 | 2 | 3,
+            text: b.text,
+          })),
+      [blocks],
+    )
+
+    /** jump to a heading block: smooth-scroll it into view and flash it */
+    const scrollToBlock = (id: string) => {
+      const el = document.querySelector(`[data-block-id="${id}"]`)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setFlashId(id)
+      if (flashTimerRef.current !== undefined) window.clearTimeout(flashTimerRef.current)
+      flashTimerRef.current = window.setTimeout(() => {
+        flashTimerRef.current = undefined
+        setFlashId(null)
+      }, 1800)
+    }
+
+    /** presentational ToC block — entries are clickable, content auto-updates */
+    const renderToc = (): ReactNode => (
+      <div className="toc-card group/toc relative overflow-hidden rounded-lg border bg-muted/20">
+        <div className="flex items-center gap-1.5 border-b bg-muted/40 px-3.5 py-2">
+          <ListTree className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Contents
+          </span>
+          <span className="ml-auto text-[10px] tabular-nums text-muted-foreground/70">
+            {tocEntries.length} heading{tocEntries.length === 1 ? '' : 's'}
+          </span>
+        </div>
+        {tocEntries.length === 0 ? (
+          <p className="px-3.5 py-3 text-[13px] leading-6 text-muted-foreground">
+            No headings yet — add H1, H2 or H3 headings and they will show up here
+            automatically.
+          </p>
+        ) : (
+          <nav aria-label="Table of contents" className="max-h-72 overflow-y-auto px-2 py-1.5">
+            <ul>
+              {tocEntries.map((e) => (
+                <li key={e.id}>
+                  <button
+                    type="button"
+                    onClick={() => scrollToBlock(e.id)}
+                    title={`Jump to “${e.text.replace(/[*$`]/g, '')}”`}
+                    className={cn(
+                      'flex w-full items-baseline gap-1.5 rounded-md px-1.5 py-1 text-left text-[13px] leading-6 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground',
+                      e.level === 2 && 'pl-5',
+                      e.level === 3 && 'pl-8',
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'shrink-0 text-muted-foreground/50',
+                        e.level === 1 && 'font-bold text-foreground/70',
+                      )}
+                    >
+                      {e.level === 1 ? '§' : e.level === 2 ? '–' : '·'}
+                    </span>
+                    <span
+                      className={cn(
+                        'min-w-0 flex-1 truncate',
+                        e.level === 1 && 'font-semibold',
+                      )}
+                    >
+                      <InlineMarkdown text={e.text || 'Untitled heading'} />
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
+        <span className="pointer-events-none absolute bottom-1.5 right-2.5 text-[10px] text-muted-foreground/0 transition-colors group-hover/toc:text-muted-foreground/60">
+          updates automatically
+        </span>
+      </div>
+    )
+
     const prevTextual = (idx: number): Block | null => {
       for (let i = idx - 1; i >= 0; i--) {
         if (isTextual(blocks[i].type)) return blocks[i]
@@ -594,6 +699,24 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         } else {
           if (stripped !== target.text) setBlockText(targetId, stripped)
           insertBlockAfter(targetId, createBlock('divider'))
+          activate(targetId, 'end')
+        }
+        return
+      }
+
+      // ---- table of contents: same flow as the divider (block + fresh line) ----
+      if (type === 'toc') {
+        if (stripped.trim() === '' && target.type === 'p') {
+          const idx = blocksRef.current.findIndex((b) => b.id === targetId)
+          const arr = [...blocksRef.current]
+          arr[idx] = createBlock('toc')
+          const fresh = createBlock('p')
+          arr.splice(idx + 1, 0, fresh)
+          commit(arr)
+          activate(fresh.id, 'start')
+        } else {
+          if (stripped !== target.text) setBlockText(targetId, stripped)
+          insertBlockAfter(targetId, createBlock('toc'))
           activate(targetId, 'end')
         }
         return
@@ -1567,6 +1690,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       if (block.type === 'table') return renderTable(block, editing)
       if (block.type === 'image') return renderImage(block, idx)
       if (block.type === 'divider') return <hr className="border-border" />
+      if (block.type === 'toc') return renderToc()
       return editing ? renderTextEditing(block, idx) : renderTextRendered(block, idx)
     }
 
@@ -1607,9 +1731,13 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
             return (
               <div
                 key={block.id}
+                data-block-id={block.id}
                 className={cn(
-                  'group relative pl-11 sm:pl-12',
+                  'group relative rounded-lg pl-11 transition-[background-color,box-shadow,opacity] duration-500 sm:pl-12',
                   dragIndex === idx && 'opacity-40',
+                  // ToC jump target: brief highlight ring that fades out
+                  flashId === block.id &&
+                    'bg-primary/5 ring-2 ring-primary/60 ring-offset-2 ring-offset-background',
                 )}
                 onDragOver={(e) => handleRowDragOver(e, idx)}
                 onDrop={(e) => handleRowDrop(e)}
