@@ -18,6 +18,9 @@ export interface Note {
   title: string
   content: string
   pinned: boolean
+  /** manual position within the chapter, set by arrange mode — smaller = higher.
+   *  Undefined until the user rearranges the chapter's notes for the first time. */
+  order?: number
   createdAt: number
   updatedAt: number
 }

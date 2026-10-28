@@ -13,11 +13,20 @@ function uid(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-/** Pinned notes first, then most recently updated */
+/** Pinned notes first, then most recently updated. Once every note in a
+ *  list has been manually arranged (order set on all of them), the manual
+ *  order wins completely — pinning becomes a badge only. */
 export function sortNotes(list: Note[]): Note[] {
-  return [...list].sort((a, b) =>
-    a.pinned === b.pinned ? b.updatedAt - a.updatedAt : a.pinned ? -1 : 1,
-  )
+  if (list.length > 0 && list.every((n) => n.order !== undefined)) {
+    return [...list].sort((a, b) => (a.order as number) - (b.order as number))
+  }
+  return [...list].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+    const ao = a.order ?? Number.MAX_SAFE_INTEGER
+    const bo = b.order ?? Number.MAX_SAFE_INTEGER
+    if (ao !== bo) return ao - bo
+    return b.updatedAt - a.updatedAt
+  })
 }
 
 interface SelectionInput {
@@ -61,6 +70,11 @@ export interface NotepadStore extends SelectionInput {
   selectChapter: (chapterId: string) => void
   selectNote: (id: string) => void
   setSearchQuery: (q: string) => void
+
+  /** arrange mode commits — ids are the full new order of that group */
+  reorderSubjects: (orderedIds: string[]) => void
+  reorderChapters: (subjectId: string, orderedIds: string[]) => void
+  reorderNotes: (chapterId: string, orderedIds: string[]) => void
 
   importData: (backup: NotepadBackup) => void
   clearAll: () => void
@@ -131,21 +145,30 @@ export const useNotepadStore = create<NotepadStore>()(
         }),
 
       addNote: (chapterId, title = 'Untitled note') => {
-        const note: Note = {
-          id: uid(),
-          chapterId,
-          title,
-          content: '',
-          pinned: false,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        }
-        set((s) => ({
-          notes: [note, ...s.notes],
-          selectedChapterId: chapterId,
-          selectedNoteId: note.id,
-        }))
-        return note
+        let created: Note | undefined
+        set((s) => {
+          const ordered = s.notes
+            .filter((n) => n.chapterId === chapterId && n.order !== undefined)
+            .map((n) => n.order as number)
+          const note: Note = {
+            id: uid(),
+            chapterId,
+            title,
+            content: '',
+            pinned: false,
+            // a manually arranged chapter keeps its order — new notes go on top
+            ...(ordered.length ? { order: Math.min(...ordered) - 1 } : {}),
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          }
+          created = note
+          return {
+            notes: [note, ...s.notes],
+            selectedChapterId: chapterId,
+            selectedNoteId: note.id,
+          }
+        })
+        return created as Note
       },
 
       updateNote: (id, patch) =>
@@ -180,6 +203,46 @@ export const useNotepadStore = create<NotepadStore>()(
           return {
             selectedChapterId: chapterId,
             selectedNoteId: chapterNotes.length ? chapterNotes[0].id : null,
+          }
+        }),
+
+      /** apply a new order to the subjects list (ids must be a permutation) */
+      reorderSubjects: (orderedIds) =>
+        set((s) => {
+          if (orderedIds.length !== s.subjects.length) return s
+          const byId = new Map(s.subjects.map((x) => [x.id, x]))
+          const next = orderedIds.map((id) => byId.get(id))
+          if (next.some((x) => !x)) return s
+          return { subjects: next as Subject[] }
+        }),
+
+      /** reorder one subject's chapters inside the flat chapter list */
+      reorderChapters: (subjectId, orderedIds) =>
+        set((s) => {
+          const current = s.chapters.filter((c) => c.subjectId === subjectId)
+          if (orderedIds.length !== current.length) return s
+          const byId = new Map(current.map((c) => [c.id, c]))
+          if (!orderedIds.every((id) => byId.has(id))) return s
+          let k = 0
+          const chapters = s.chapters.map((c) =>
+            c.subjectId === subjectId ? (byId.get(orderedIds[k++]) as Chapter) : c,
+          )
+          return { chapters }
+        }),
+
+      /** persist a manual order for a chapter's notes (assigns order 0..n-1) */
+      reorderNotes: (chapterId, orderedIds) =>
+        set((s) => {
+          const current = s.notes.filter((n) => n.chapterId === chapterId)
+          if (orderedIds.length !== current.length) return s
+          const idSet = new Set(orderedIds)
+          if (!current.every((n) => idSet.has(n.id))) return s
+          const orderMap = new Map(orderedIds.map((id, i) => [id, i]))
+          return {
+            notes: s.notes.map((n) => {
+              const o = orderMap.get(n.id)
+              return o !== undefined && o !== n.order ? { ...n, order: o } : n
+            }),
           }
         }),
 
