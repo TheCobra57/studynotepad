@@ -31,7 +31,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { useNotepadStore } from '@/lib/notepad/store'
+import { useNotepadStore, useSelectedNote } from '@/lib/notepad/store'
 import type { MobileView, NotepadBackup } from '@/lib/notepad/types'
 import { useToast } from '@/hooks/use-toast'
 import { Sidebar } from '@/components/notepad/sidebar'
@@ -56,7 +56,9 @@ export default function Home() {
   const [cheatOpen, setCheatOpen] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
   const [printOpen, setPrintOpen] = useState(false)
+  const [focusMode, setFocusMode] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const selectedNote = useSelectedNote()
 
   // Ctrl/Cmd+P opens the customisable print dialog instead of the raw browser print
   useEffect(() => {
@@ -71,6 +73,53 @@ export default function Home() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  // ---------- fullscreen (focus) mode ----------
+
+  const toggleFocusMode = () => {
+    const next = !focusMode
+    setFocusMode(next)
+    if (next) {
+      // also hide the browser chrome when allowed (may be blocked inside
+      // sandboxed iframes — the CSS focus mode still applies either way)
+      document.documentElement.requestFullscreen?.().catch(() => {})
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {})
+    }
+  }
+
+  // leaving native fullscreen (Esc / browser control) also leaves focus mode
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement) setFocusMode(false)
+    }
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => document.removeEventListener('fullscreenchange', onFsChange)
+  }, [])
+
+  // Esc leaves focus mode, unless an overlay (menu/dialog/whiteboard) eats it first
+  useEffect(() => {
+    if (!focusMode) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const overlayOpen = document.querySelector(
+        '[data-state="open"][role="menu"], [data-state="open"][role="dialog"], [data-state="open"][role="alertdialog"]',
+      )
+      if (overlayOpen) return
+      setFocusMode(false)
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [focusMode])
+
+  // if the open note disappears (deleted), there is nothing to focus on anymore
+  useEffect(() => {
+    if (focusMode && !selectedNote) {
+      setFocusMode(false)
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+    }
+  }, [focusMode, selectedNote])
 
   const subjects = useNotepadStore((s) => s.subjects)
   const chapters = useNotepadStore((s) => s.chapters)
@@ -143,8 +192,9 @@ export default function Home() {
   return (
     <>
       <div className="flex h-dvh flex-col bg-background text-foreground">
-      {/* Header */}
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
+      {/* Header — hidden in fullscreen focus mode */}
+      {!focusMode && (
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
             <GraduationCap className="h-5 w-5" />
@@ -186,13 +236,16 @@ export default function Home() {
           </DropdownMenu>
         </div>
       </header>
+      )}
 
-      {/* Panes */}
+      {/* Panes — in focus mode only the editor remains */}
       <main className="flex min-h-0 flex-1">
         <aside
           className={cn(
-            'w-full shrink-0 overflow-y-auto border-r bg-muted/20 lg:block lg:w-64',
-            mobileView === 'tree' ? 'block' : 'hidden',
+            'w-full shrink-0 overflow-y-auto border-r bg-muted/20 lg:w-64',
+            focusMode
+              ? 'hidden'
+              : cn('lg:block', mobileView === 'tree' ? 'block' : 'hidden'),
           )}
           aria-label="Subjects"
         >
@@ -201,8 +254,10 @@ export default function Home() {
 
         <section
           className={cn(
-            'w-full shrink-0 lg:block lg:w-80',
-            mobileView === 'notes' ? 'block' : 'hidden',
+            'w-full shrink-0 lg:w-80',
+            focusMode
+              ? 'hidden'
+              : cn('lg:block', mobileView === 'notes' ? 'block' : 'hidden'),
           )}
           aria-label="Notes list"
         >
@@ -214,8 +269,10 @@ export default function Home() {
 
         <section
           className={cn(
-            'min-w-0 flex-1 lg:block',
-            mobileView === 'editor' ? 'block' : 'hidden',
+            'min-w-0 flex-1',
+            focusMode
+              ? 'block'
+              : cn('lg:block', mobileView === 'editor' ? 'block' : 'hidden'),
           )}
           aria-label="Note editor"
         >
@@ -224,11 +281,14 @@ export default function Home() {
             onOpenSidebar={() => setMobileView('tree')}
             onOpenCheatSheet={() => setCheatOpen(true)}
             onPrint={() => setPrintOpen(true)}
+            fullscreen={focusMode}
+            onToggleFullscreen={toggleFocusMode}
           />
         </section>
       </main>
 
-      {/* Footer */}
+      {/* Footer — hidden in fullscreen focus mode */}
+      {!focusMode && (
       <footer className="mt-auto flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-0.5 border-t px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-[11px] text-muted-foreground">
         <span className="tabular-nums">
           {subjects.length} subjects · {chapters.length} chapters · {notes.length} notes — stored
@@ -238,6 +298,7 @@ export default function Home() {
           {'$…$'} math · {'\\ce{}'} chemistry · type / to insert · Ctrl+P print
         </span>
       </footer>
+      )}
 
       <CheatSheet open={cheatOpen} onOpenChange={setCheatOpen} />
 

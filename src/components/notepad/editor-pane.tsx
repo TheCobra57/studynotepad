@@ -23,6 +23,8 @@ import {
   List,
   ListOrdered,
   ListTodo,
+  Maximize2,
+  Minimize2,
   Minus,
   MoreHorizontal,
   PanelLeft,
@@ -69,9 +71,19 @@ interface EditorPaneProps {
   onOpenSidebar?: () => void
   onOpenCheatSheet?: () => void
   onPrint?: () => void
+  /** true while the editor is expanded to fill the whole screen */
+  fullscreen?: boolean
+  onToggleFullscreen?: () => void
 }
 
-export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }: EditorPaneProps) {
+export function EditorPane({
+  onBack,
+  onOpenSidebar,
+  onOpenCheatSheet,
+  onPrint,
+  fullscreen = false,
+  onToggleFullscreen,
+}: EditorPaneProps) {
   const note = useSelectedNote()
   const chapters = useNotepadStore((s) => s.chapters)
   const subjects = useNotepadStore((s) => s.subjects)
@@ -279,13 +291,13 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }:
     <div className="flex h-full min-w-0 flex-col">
       {/* Top bar */}
       <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
-        {onBack && (
+        {onBack && !fullscreen && (
           <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden" onClick={onBack}>
             <ChevronLeft className="h-4 w-4" />
             <span className="sr-only">Back to notes</span>
           </Button>
         )}
-        {onOpenSidebar && (
+        {onOpenSidebar && !fullscreen && (
           <Button
             variant="ghost"
             size="icon"
@@ -313,6 +325,23 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }:
         </div>
 
         <div className="ml-auto flex items-center gap-1.5">
+          {onToggleFullscreen && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn('h-8 w-8', fullscreen ? 'inline-flex' : 'hidden lg:inline-flex')}
+              onClick={onToggleFullscreen}
+              title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen — hide panels'}
+              aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+              {fullscreen ? (
+                <Minimize2 className="h-4 w-4" />
+              ) : (
+                <Maximize2 className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+
           {onPrint && (
             <Button
               variant="outline"
@@ -566,8 +595,13 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }:
         </div>
       </div>
 
-      {/* Title */}
-      <div className="shrink-0 px-4 pt-4 md:px-6">
+      {/* Title — centred to a comfortable reading width in fullscreen */}
+      <div
+        className={cn(
+          'shrink-0 px-4 pt-4 md:px-6',
+          fullscreen && 'mx-auto w-full max-w-3xl px-6',
+        )}
+      >
         <Input
           value={note.title}
           onChange={(e) => updateNote(note.id, { title: e.target.value })}
@@ -579,7 +613,12 @@ export function EditorPane({ onBack, onOpenSidebar, onOpenCheatSheet, onPrint }:
       </div>
 
       {/* Body — WYSIWYG block editor */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 md:px-6">
+      <div
+        className={cn(
+          'min-h-0 flex-1 overflow-y-auto px-4 py-3 md:px-6',
+          fullscreen && 'mx-auto w-full max-w-3xl px-6',
+        )}
+      >
         <BlockEditor
           key={note.id}
           ref={editorRef}
