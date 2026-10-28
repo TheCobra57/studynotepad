@@ -38,6 +38,7 @@ import { Sidebar } from '@/components/notepad/sidebar'
 import { NotesPane } from '@/components/notepad/notes-pane'
 import { EditorPane } from '@/components/notepad/editor-pane'
 import { CheatSheet } from '@/components/notepad/cheat-sheet'
+import { WelcomeDialog, type WelcomeChoice } from '@/components/notepad/welcome-dialog'
 import { ThemeToggle } from '@/components/notepad/theme-toggle'
 import { PrintRoot } from '@/components/notepad/print-root'
 import { PrintDialog } from '@/components/notepad/print-dialog'
@@ -180,6 +181,27 @@ export default function Home() {
     }
   }
 
+  // welcome dialog: keep the current (seeded) notes or start from an empty pad
+  const handleWelcomeChoice = (choice: WelcomeChoice, returning: boolean) => {
+    if (choice === 'fresh') {
+      clearAll()
+      setMobileView('tree')
+      toast({
+        title: 'Starting afresh',
+        description: 'Your notepad is empty — add your first subject to begin.',
+      })
+    } else {
+      const count = useNotepadStore.getState().notes.length
+      toast({
+        title: returning ? 'Your notes stay as they are' : 'Test data kept',
+        description:
+          count > 0
+            ? `${count} ${returning ? 'notes kept.' : 'sample notes are ready to explore.'}`
+            : 'Have fun exploring the editor.',
+      })
+    }
+  }
+
   if (!mounted) {
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-background">
@@ -304,6 +326,7 @@ export default function Home() {
       )}
 
       <CheatSheet open={cheatOpen} onOpenChange={setCheatOpen} />
+      <WelcomeDialog onChoose={handleWelcomeChoice} />
 
       <input
         ref={fileInputRef}
