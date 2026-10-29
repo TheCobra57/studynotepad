@@ -2,8 +2,8 @@
  * Image helpers for the block editor.
  *
  * Uploaded / pasted images are downscaled and re-encoded as the smaller of
- * PNG or JPEG before they are stored — notes live in localStorage (~5 MB),
- * so keeping images compact is what makes the whole local-first idea work.
+ * PNG or JPEG before they are stored — notes live in IndexedDB (hundreds of
+ * MB, via localforage), and compact images keep the pad snappy to load.
  */
 
 /** longest edge of a stored image, in px */

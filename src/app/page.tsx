@@ -60,6 +60,9 @@ export default function Home() {
   const [focusMode, setFocusMode] = useState<EditorFocusMode>('off')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const selectedNote = useSelectedNote()
+  // saved data is read from IndexedDB asynchronously — keep the splash up
+  // until it lands so the real notes render without a seed-data flash
+  const hasHydrated = useNotepadStore((s) => s.hasHydrated)
 
   const focusActive = focusMode !== 'off'
 
@@ -202,7 +205,7 @@ export default function Home() {
     }
   }
 
-  if (!mounted) {
+  if (!mounted || !hasHydrated) {
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-background">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600 text-white">

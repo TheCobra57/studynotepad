@@ -63,3 +63,6 @@ server.log
 /.zscripts/
 /worklog.md
 /agent-ctx/
+
+# tool outputs
+/tool-results/

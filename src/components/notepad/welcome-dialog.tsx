@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { STORAGE_KEY } from '@/lib/notepad/constants'
+import { hasStoredData } from '@/lib/notepad/idb-storage'
 import { useNotepadStore } from '@/lib/notepad/store'
 
 /** set once the user has made (or implicitly accepted) a choice — gates the dialog */
@@ -27,12 +27,15 @@ interface VisitInfo {
  * Anyone who has never answered the welcome question gets asked once: genuine
  * first-time visitors (seeded test data in view) as well as people who used
  * the app before this dialog existed (their own notes in view).
+ *
+ * Runs only after the store has hydrated, so `hasStoredData()` already knows
+ * whether IndexedDB (or the migrated legacy localStorage copy) held data.
  */
 function detectVisit(): VisitInfo {
   if (typeof window === 'undefined') return { show: false, returning: false }
   try {
     if (localStorage.getItem(WELCOME_KEY)) return { show: false, returning: false }
-    return { show: true, returning: !!localStorage.getItem(STORAGE_KEY) }
+    return { show: true, returning: hasStoredData() }
   } catch {
     return { show: false, returning: false } // storage unavailable — don't nag
   }

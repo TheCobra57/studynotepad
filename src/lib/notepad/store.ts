@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import { browserStorage } from './idb-storage'
 import { STORAGE_KEY } from './constants'
 import { seedChapters, seedNotes, seedSubjects } from './seed'
 import type { Chapter, NotepadBackup, Note, Subject } from './types'
@@ -54,6 +55,10 @@ function normalizeSelection(state: SelectionInput) {
 export interface NotepadStore extends SelectionInput {
   searchQuery: string
 
+  /** false until the persisted state (if any) has been read from IndexedDB */
+  hasHydrated: boolean
+  setHasHydrated: (v: boolean) => void
+
   addSubject: (name: string, color: string) => Subject
   renameSubject: (id: string, name: string, color?: string) => void
   deleteSubject: (id: string) => void
@@ -97,6 +102,8 @@ export const useNotepadStore = create<NotepadStore>()(
       ...seedState,
       ...seedSelection,
       searchQuery: '',
+      hasHydrated: false,
+      setHasHydrated: (v) => set({ hasHydrated: v }),
 
       addSubject: (name, color) => {
         const subject: Subject = { id: uid(), name: name.trim(), color, createdAt: Date.now() }
@@ -282,7 +289,14 @@ export const useNotepadStore = create<NotepadStore>()(
     {
       name: STORAGE_KEY,
       version: 1,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(browserStorage),
+      // flips hasHydrated once the (async) IndexedDB read finishes — on the
+      // server the storage is undefined so this never fires there, which is
+      // fine: the UI splash gate covers it
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) console.warn('StudyPad: could not load saved data', error)
+        useNotepadStore.setState({ hasHydrated: true })
+      },
       partialize: (s) => ({
         subjects: s.subjects,
         chapters: s.chapters,
