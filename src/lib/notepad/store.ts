@@ -290,9 +290,9 @@ export const useNotepadStore = create<NotepadStore>()(
       name: STORAGE_KEY,
       version: 1,
       storage: createJSONStorage(browserStorage),
-      // flips hasHydrated once the (async) IndexedDB read finishes — on the
-      // server the storage is undefined so this never fires there, which is
-      // fine: the UI splash gate covers it
+      // flips hasHydrated once the (async) IndexedDB read finishes; during
+      // SSR the no-op storage resolves immediately with no data, which is
+      // fine — the UI splash gate covers it
       onRehydrateStorage: () => (_state, error) => {
         if (error) console.warn('StudyPad: could not load saved data', error)
         useNotepadStore.setState({ hasHydrated: true })

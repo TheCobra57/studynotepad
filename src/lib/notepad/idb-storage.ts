@@ -69,10 +69,21 @@ export const idbStorage: StateStorage = {
   },
 }
 
-/** factory for createJSONStorage — undefined on the server, so the persist
- *  middleware simply skips rehydration during SSR instead of touching IDB */
-export function browserStorage(): StateStorage | undefined {
-  return typeof window === 'undefined' ? undefined : idbStorage
+/** no-op storage used during SSR — reads find nothing, writes go nowhere, so
+ *  the persist middleware hydrates instantly with the default state instead
+ *  of erroring on an undefined storage. Methods are async on purpose: the
+ *  rehydration callback then defers to a microtask, after the store has been
+ *  fully initialized (a synchronous getItem would fire it mid-creation). */
+const noopStorage: StateStorage = {
+  getItem: async () => null,
+  setItem: async () => {},
+  removeItem: async () => {},
+}
+
+/** factory for createJSONStorage — the server gets the no-op variant, the
+ *  browser gets IndexedDB */
+export function browserStorage(): StateStorage {
+  return typeof window === 'undefined' ? noopStorage : idbStorage
 }
 
 /** read the raw persisted value directly (used by tests/tooling) */
