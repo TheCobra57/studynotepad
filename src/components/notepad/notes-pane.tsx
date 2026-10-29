@@ -5,6 +5,7 @@ import { formatDistanceToNow } from 'date-fns'
 import {
   Check,
   ChevronLeft,
+  FileUp,
   GripVertical,
   MoreHorizontal,
   MoveVertical,
@@ -44,9 +45,11 @@ import type { Note } from '@/lib/notepad/types'
 interface NotesPaneProps {
   onBack?: () => void
   onOpenNote?: () => void
+  /** open the .md import dialog (always available — it picks its own destination) */
+  onImportMd?: () => void
 }
 
-export function NotesPane({ onBack, onOpenNote }: NotesPaneProps) {
+export function NotesPane({ onBack, onOpenNote, onImportMd }: NotesPaneProps) {
   const chapters = useNotepadStore((s) => s.chapters)
   const subjects = useNotepadStore((s) => s.subjects)
   const notes = useNotepadStore((s) => s.notes)
@@ -142,10 +145,24 @@ export function NotesPane({ onBack, onOpenNote }: NotesPaneProps) {
             </Button>
           ) : (
             !searching && (
-              <Button size="sm" onClick={handleNewNote} disabled={!chapter} title="New note">
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">New</span>
-              </Button>
+              <div className="flex items-center gap-1">
+                {onImportMd && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={onImportMd}
+                    title="Import a .md file as a note"
+                    aria-label="Import a markdown file"
+                  >
+                    <FileUp className="h-4 w-4" />
+                  </Button>
+                )}
+                <Button size="sm" onClick={handleNewNote} disabled={!chapter} title="New note">
+                  <Plus className="h-4 w-4" />
+                  <span className="hidden sm:inline">New</span>
+                </Button>
+              </div>
             )
           )}
         </div>

@@ -5,6 +5,7 @@ import {
   BookOpen,
   Database,
   Download,
+  FileUp,
   GraduationCap,
   HardDrive,
   Trash2,
@@ -42,6 +43,7 @@ import { WelcomeDialog, type WelcomeChoice } from '@/components/notepad/welcome-
 import { ThemeToggle } from '@/components/notepad/theme-toggle'
 import { PrintRoot } from '@/components/notepad/print-root'
 import { PrintDialog } from '@/components/notepad/print-dialog'
+import { MdImportDialog } from '@/components/notepad/md-import-dialog'
 
 const emptySubscribe = () => () => {}
 
@@ -57,6 +59,7 @@ export default function Home() {
   const [cheatOpen, setCheatOpen] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
   const [printOpen, setPrintOpen] = useState(false)
+  const [mdImportOpen, setMdImportOpen] = useState(false)
   const [focusMode, setFocusMode] = useState<EditorFocusMode>('off')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const selectedNote = useSelectedNote()
@@ -256,6 +259,10 @@ export default function Home() {
                 <Upload className="h-4 w-4" /> Import backup
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setMdImportOpen(true)}>
+                <FileUp className="h-4 w-4" /> Import note (.md)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={() => setClearOpen(true)}>
                 <Trash2 className="h-4 w-4" /> Clear all data
               </DropdownMenuItem>
@@ -291,6 +298,7 @@ export default function Home() {
           <NotesPane
             onBack={() => setMobileView('tree')}
             onOpenNote={() => setMobileView('editor')}
+            onImportMd={() => setMdImportOpen(true)}
           />
         </section>
 
@@ -330,6 +338,11 @@ export default function Home() {
 
       <CheatSheet open={cheatOpen} onOpenChange={setCheatOpen} />
       <WelcomeDialog onChoose={handleWelcomeChoice} />
+      <MdImportDialog
+        open={mdImportOpen}
+        onOpenChange={setMdImportOpen}
+        onImported={() => setMobileView('editor')}
+      />
 
       <input
         ref={fileInputRef}
