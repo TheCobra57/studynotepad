@@ -276,7 +276,7 @@ export function NotesPane({ onBack, onOpenNote, onImportMd }: NotesPaneProps) {
                       )}
                       <p
                         className={cn(
-                          'min-w-0 flex-1 truncate text-sm',
+                          'min-w-0 flex-1 break-words text-sm line-clamp-2',
                           active ? 'font-semibold' : 'font-medium',
                         )}
                       >

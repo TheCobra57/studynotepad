@@ -403,9 +403,11 @@ export function Whiteboard({ open, onOpenChange, onInsert, initialImage }: White
   )
 }
 
-/** draw an image centred, scaled to fit inside the board (contain) */
+/** draw an image centred, scaled up or down to fill the board (contain) */
 function drawContain(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
-  const scale = Math.min(CANVAS_W / img.naturalWidth, CANVAS_H / img.naturalHeight, 1)
+  // no upscale cap — imported images always fill the board (small pictures
+  // are enlarged; very large ones are scaled down to fit)
+  const scale = Math.min(CANVAS_W / img.naturalWidth, CANVAS_H / img.naturalHeight)
   const w = img.naturalWidth * scale
   const h = img.naturalHeight * scale
   ctx.fillStyle = '#ffffff'

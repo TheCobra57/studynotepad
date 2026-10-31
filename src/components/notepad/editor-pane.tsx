@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import {
   BookOpen,
@@ -38,7 +38,6 @@ import {
   Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,6 +62,7 @@ import { useNotepadStore, useSelectedNote } from '@/lib/notepad/store'
 import type { EditorFocusMode } from '@/lib/notepad/types'
 import { useToast } from '@/hooks/use-toast'
 import { BlockEditor, type BlockEditorHandle } from './block-editor'
+import { autoResize } from '@/lib/notepad/blocks'
 import { FORMULA_TEMPLATES, unwrapTemplate, type ImageAction } from './snippets'
 import { Latex } from './markdown-preview'
 import { Whiteboard } from './whiteboard'
@@ -94,11 +94,18 @@ export function EditorPane({
   const { updateNote, togglePin, deleteNote, addNote } = useNotepadStore()
   const { toast } = useToast()
   const editorRef = useRef<BlockEditorHandle>(null)
+  const titleRef = useRef<HTMLTextAreaElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [whiteboardOpen, setWhiteboardOpen] = useState(false)
   const [whiteboardInitial, setWhiteboardInitial] = useState<string | null>(null)
   const [annotateTargetId, setAnnotateTargetId] = useState<string | null>(null)
+
+  // grow the title to fit — long titles wrap to more lines instead of
+  // scrolling sideways and disappearing
+  useLayoutEffect(() => {
+    autoResize(titleRef.current)
+  }, [note?.id, note?.title])
 
   const chapter = note ? chapters.find((c) => c.id === note.chapterId) : null
   const subject = chapter ? subjects.find((s) => s.id === chapter.subjectId) : null
@@ -637,11 +644,20 @@ export function EditorPane({
           focusMode !== 'off' && 'mx-auto w-full max-w-3xl px-6',
         )}
       >
-        <Input
+        <textarea
+          ref={titleRef}
           value={note.title}
-          onChange={(e) => updateNote(note.id, { title: e.target.value })}
+          onChange={(e) => {
+            // pasted line breaks collapse to spaces — a title is one logical line
+            updateNote(note.id, { title: e.target.value.replace(/[\r\n]+/g, ' ') })
+            autoResize(e.currentTarget)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.preventDefault()
+          }}
           placeholder="Untitled note"
-          className="h-auto border-none px-0 text-xl font-bold tracking-tight shadow-none focus-visible:ring-0 md:text-2xl"
+          rows={1}
+          className="block w-full resize-none overflow-hidden border-none bg-transparent px-0 py-0.5 text-xl font-bold tracking-tight shadow-none outline-none placeholder:text-muted-foreground focus-visible:outline-none md:text-2xl"
           aria-label="Note title"
           maxLength={120}
         />
