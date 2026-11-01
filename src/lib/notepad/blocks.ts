@@ -86,10 +86,14 @@ export function isChemBlock(text: string): boolean {
 
 // ---------------------------------------------------------------------------
 
-const RE_HEADING = /^(#{1,6})\s+(.*)$/
+// Bare markers ("2.", "-", "#") are accepted as EMPTY items so that empty
+// blocks round-trip on reload instead of degrading into stray paragraphs
+// that break numbered-list chains. A space is still required before content,
+// so "1.5 liters" or "#hashtag" stay plain paragraphs.
+const RE_HEADING = /^(#{1,6})(?:\s+(.*))?$/
 const RE_TODO = /^[-*+]\s+\[([ xX])\]\s*(.*)$/
-const RE_BULLET = /^[-*+]\s+(.*)$/
-const RE_NUMBERED = /^\d+[.)]\s+(.*)$/
+const RE_BULLET = /^[-*+](?:\s+(.*))?$/
+const RE_NUMBERED = /^(\d+)[.)](?:\s+(.*))?$/
 const RE_DIVIDER = /^(-{3,}|\*{3,}|_{3,})$/
 /** ![alt](url "75") — the optional quoted title carries the display width in % */
 const RE_IMAGE = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/
@@ -176,7 +180,7 @@ export function parseMarkdownToBlocks(md: string): Block[] {
     const h = line.match(RE_HEADING)
     if (h) {
       const level = Math.min(h[1].length, 3)
-      blocks.push({ id: newBlockId(), type: (`h${level}` as BlockType), text: h[2].trim() })
+      blocks.push({ id: newBlockId(), type: (`h${level}` as BlockType), text: (h[2] ?? '').trim() })
       i++
       continue
     }
@@ -197,7 +201,7 @@ export function parseMarkdownToBlocks(md: string): Block[] {
     // ---- bullet ----
     const bullet = line.match(RE_BULLET)
     if (bullet) {
-      blocks.push({ id: newBlockId(), type: 'bullet', text: bullet[1].trim() })
+      blocks.push({ id: newBlockId(), type: 'bullet', text: (bullet[1] ?? '').trim() })
       i++
       continue
     }
@@ -205,7 +209,7 @@ export function parseMarkdownToBlocks(md: string): Block[] {
     // ---- numbered ----
     const numbered = line.match(RE_NUMBERED)
     if (numbered) {
-      blocks.push({ id: newBlockId(), type: 'numbered', text: numbered[1].trim() })
+      blocks.push({ id: newBlockId(), type: 'numbered', text: (numbered[2] ?? '').trim() })
       i++
       continue
     }
@@ -252,24 +256,55 @@ export function parseMarkdownToBlocks(md: string): Block[] {
   return blocks
 }
 
-/** Serialize blocks back to markdown (round-trips through parseMarkdownToBlocks). */
+/**
+ * Serialize blocks back to markdown (round-trips through parseMarkdownToBlocks).
+ *
+ * Numbered items keep their real consecutive number (1., 2., 3. …) so the
+ * saved/exported markdown matches what the editor displays, and empty items
+ * serialize as bare markers ("2.", "-") that parse back as empty blocks —
+ * this is what keeps list numbering from resetting to 1 after a reload.
+ */
 export function serializeBlocks(blocks: Block[]): string {
-  const rendered = blocks.map((b) => {
+  // running number per block — identical to the editor's live list numbering
+  const numbers: number[] = []
+  let n = 0
+  for (const b of blocks) {
+    n = b.type === 'numbered' ? n + 1 : 0
+    numbers.push(n)
+  }
+
+  const marker = (b: Block, i: number): string => {
+    const hasText = b.text.trim() !== ''
     switch (b.type) {
       case 'h1':
-        return `# ${b.text}`
+        return hasText ? `# ${b.text}` : '#'
       case 'h2':
-        return `## ${b.text}`
+        return hasText ? `## ${b.text}` : '##'
       case 'h3':
-        return `### ${b.text}`
+        return hasText ? `### ${b.text}` : '###'
       case 'bullet':
-        return `- ${b.text}`
+        return hasText ? `- ${b.text}` : '-'
       case 'numbered':
-        return `1. ${b.text}`
+        return hasText ? `${numbers[i]}. ${b.text}` : `${numbers[i]}.`
       case 'todo':
         return `- [${b.checked ? 'x' : ' '}] ${b.text}`
       case 'quote':
-        return `> ${b.text}`
+        return hasText ? `> ${b.text}` : '>'
+      default:
+        return b.text
+    }
+  }
+
+  const rendered = blocks.map((b, i) => {
+    switch (b.type) {
+      case 'h1':
+      case 'h2':
+      case 'h3':
+      case 'bullet':
+      case 'numbered':
+      case 'todo':
+      case 'quote':
+        return marker(b, i)
       case 'code':
         return `\`\`\`${b.lang ?? ''}\n${b.text}\n\`\`\``
       case 'divider':
@@ -287,11 +322,30 @@ export function serializeBlocks(blocks: Block[]): string {
     }
   })
 
-  // drop empty paragraphs at the very start/end so a fresh note stays "" in storage
+  // drop empty placeholder artifacts at the very start/end (empty paragraphs,
+  // empty list items left by pressing Enter, empty headings…) so a fresh note
+  // stays "" in storage and lists don't carry trailing empty markers around
+  const isArtifact = (b: Block): boolean => {
+    if (b.text.trim() !== '') return false
+    switch (b.type) {
+      case 'p':
+      case 'quote':
+      case 'bullet':
+      case 'numbered':
+      case 'h1':
+      case 'h2':
+      case 'h3':
+        return true
+      case 'todo':
+        return !b.checked
+      default:
+        return false
+    }
+  }
   let start = 0
-  let end = rendered.length
-  while (start < end && rendered[start].trim() === '' && blocks[start].type === 'p') start++
-  while (end > start && rendered[end - 1].trim() === '' && blocks[end - 1].type === 'p') end--
+  let end = blocks.length
+  while (end > start && isArtifact(blocks[end - 1])) end--
+  while (start < end && isArtifact(blocks[start])) start++
 
   return rendered.slice(start, end).join('\n\n')
 }
