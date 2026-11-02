@@ -13,9 +13,11 @@ import {
 import {
   ArrowDown,
   ArrowUp,
+  Check,
   Copy,
   GripVertical,
   ListTree,
+  MoveVertical,
   PenTool,
   Plus,
   Trash2,
@@ -45,6 +47,7 @@ import { filterCommands, type ImageAction, type SlashCommand } from './snippets'
 import { SlashMenu } from './slash-menu'
 import { InlineMarkdown, Latex, MarkdownPreview } from './markdown-preview'
 import { processImageFile } from '@/lib/notepad/image'
+import { useArrange } from '@/hooks/use-arrange'
 
 // ---------------------------------------------------------------------------
 
@@ -155,6 +158,8 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     const [fileDragOver, setFileDragOver] = useState(false)
     /** heading block briefly highlighted after a ToC link jump */
     const [flashId, setFlashId] = useState<string | null>(null)
+    /** blocks arrange mode — pointer drag & drop, same UX as the sidebar */
+    const [arranging, setArranging] = useState(false)
 
     const taRefs = useRef(new Map<string, HTMLTextAreaElement>())
     const blocksRef = useRef(blocks)
@@ -210,6 +215,40 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         flush()
       }
     }, [])
+
+    // ------------------------------------------------------------------
+    // arrange mode (⠿ Move from a block's ⋯ menu) — same hook as the
+    // sidebar: the ⋯ handle in normal mode opens its menu on press, which
+    // swallows native drags, so reordering gets a dedicated mode instead
+    // ------------------------------------------------------------------
+
+    const { drag, startDrag } = useArrange({
+      enabled: arranging,
+      onCommit: (_group, ids) => {
+        const byId = new Map(blocksRef.current.map((b) => [b.id, b] as const))
+        const next = ids.map((id) => byId.get(id)).filter((b): b is Block => b !== undefined)
+        if (next.length === blocksRef.current.length) commit(next)
+      },
+    })
+
+    const enterArrange = () => {
+      flush()
+      setActiveId(null)
+      setSlash(null)
+      setSelectedImageId(null)
+      setImgResize(null)
+      setArranging(true)
+    }
+
+    // Escape exits arrange mode
+    useEffect(() => {
+      if (!arranging) return
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') setArranging(false)
+      }
+      window.addEventListener('keydown', onKey)
+      return () => window.removeEventListener('keydown', onKey)
+    }, [arranging])
 
     // external content change while the same note stays open (e.g. import)
     useEffect(() => {
@@ -1691,6 +1730,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     }
 
     const handleAppendClick = () => {
+      if (arranging) return
       const arr = blocksRef.current
       const last = arr[arr.length - 1]
       if (last && isTextual(last.type) && last.text === '') {
@@ -1704,7 +1744,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 
     return (
       <div
-        className="relative min-h-full"
+        className={cn('relative min-h-full', arranging && 'select-none')}
         aria-label="Note content"
         data-block-editor
         onPaste={handlePaste}
@@ -1720,17 +1760,36 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
             </p>
           </div>
         )}
+        {arranging && (
+          <div className="sticky top-0 z-30 mb-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-600/30 bg-emerald-50/95 px-3 py-2 shadow-sm backdrop-blur-sm dark:border-emerald-500/30 dark:bg-emerald-950/70">
+            <p className="flex items-center gap-1.5 text-xs leading-4 text-muted-foreground">
+              <MoveVertical className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              Drag the handles to reorder blocks
+            </p>
+            <Button
+              size="sm"
+              className="h-7 shrink-0 gap-1 bg-emerald-600 text-white hover:bg-emerald-700"
+              onClick={() => setArranging(false)}
+            >
+              <Check className="h-4 w-4" /> Done
+            </Button>
+          </div>
+        )}
         <div className="pb-2">
           {blocks.map((block, idx) => {
             const editing = activeId === block.id
-            const gutterVisible = editing
+            const gutterVisible = editing || arranging
             return (
               <div
                 key={block.id}
                 data-block-id={block.id}
+                data-arrange-id={block.id}
+                data-arrange-group="block"
                 className={cn(
                   'group relative rounded-lg pl-11 transition-[background-color,box-shadow,opacity] duration-500 sm:pl-12',
                   dragIndex === idx && 'opacity-40',
+                  drag?.dragId === block.id && 'opacity-40',
+                  arranging && 'transition-none',
                   // ToC jump target: brief highlight ring that fades out
                   flashId === block.id &&
                     'bg-primary/5 ring-2 ring-primary/60 ring-offset-2 ring-offset-background',
@@ -1747,55 +1806,78 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                       : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100',
                   )}
                 >
-                  <button
-                    type="button"
-                    title="Insert block below"
-                    aria-label="Insert block below"
-                    onClick={() => handlePlusClick(block.id)}
-                    className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        draggable
-                        title="Drag to reorder — click for options"
-                        aria-label="Block options"
-                        onDragStart={(e) => handleDragStart(e, idx)}
-                        onDragEnd={handleDragEnd}
-                        className="flex h-5 w-5 cursor-grab items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground active:cursor-grabbing"
-                      >
-                        <GripVertical className="h-3.5 w-3.5" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" side="bottom" className="w-44">
-                      <DropdownMenuItem onClick={() => moveBlockBy(idx, -1)} disabled={idx === 0}>
-                        <ArrowUp className="h-4 w-4" /> Move up
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => moveBlockBy(idx, 1)}
-                        disabled={idx === blocks.length - 1}
-                      >
-                        <ArrowDown className="h-4 w-4" /> Move down
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => duplicateBlock(idx)}>
-                        <Copy className="h-4 w-4" /> Duplicate
-                      </DropdownMenuItem>
-                      <DropdownMenuItem variant="destructive" onClick={() => removeBlock(block.id)}>
-                        <Trash2 className="h-4 w-4" /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {!arranging && (
+                    <button
+                      type="button"
+                      title="Insert block below"
+                      aria-label="Insert block below"
+                      onClick={() => handlePlusClick(block.id)}
+                      className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {arranging ? (
+                    <button
+                      type="button"
+                      title="Drag to reorder"
+                      aria-label={`Reorder block ${idx + 1}`}
+                      className="flex h-5 w-5 cursor-grab touch-none items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:cursor-grabbing"
+                      onPointerDown={(e) => startDrag(e, block.id, 'block')}
+                    >
+                      <GripVertical className="h-3.5 w-3.5" />
+                    </button>
+                  ) : (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          title="Click for options"
+                          aria-label="Block options"
+                          className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                          <GripVertical className="h-3.5 w-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" side="bottom" className="w-44">
+                        <DropdownMenuItem onClick={() => moveBlockBy(idx, -1)} disabled={idx === 0}>
+                          <ArrowUp className="h-4 w-4" /> Move up
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => moveBlockBy(idx, 1)}
+                          disabled={idx === blocks.length - 1}
+                        >
+                          <ArrowDown className="h-4 w-4" /> Move down
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={enterArrange}>
+                          <GripVertical className="h-4 w-4" /> Move
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => duplicateBlock(idx)}>
+                          <Copy className="h-4 w-4" /> Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuItem variant="destructive" onClick={() => removeBlock(block.id)}>
+                          <Trash2 className="h-4 w-4" /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </div>
 
-                {/* drop indicator */}
-                {dropIndex === idx && (
+                {/* drop indicators — HTML5 image drags (primary) / arrange mode (emerald) */}
+                {!arranging && dropIndex === idx && (
                   <div className="pointer-events-none absolute -top-px left-0 right-0 h-[2px] rounded-full bg-primary" />
                 )}
+                {arranging && drag?.group === 'block' && drag?.dropIndex === idx && (
+                  <div className="pointer-events-none absolute -top-px left-0 right-0 z-10 h-[2px] rounded-full bg-emerald-600" />
+                )}
 
-                <div className={cn('relative min-w-0', blockSpacing(block.type, idx === 0))}>
+                <div
+                  className={cn(
+                    'relative min-w-0',
+                    blockSpacing(block.type, idx === 0),
+                    arranging && 'pointer-events-none',
+                  )}
+                >
                   {renderBlock(block, idx)}
                 </div>
 
@@ -1814,10 +1896,17 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           })}
         </div>
 
-        {/* click-to-append zone + final drop indicator */}
-        <div className="relative min-h-[120px] cursor-text" onClick={handleAppendClick}>
-          {dropIndex === blocks.length && (
+        {/* click-to-append zone; in arrange mode it doubles as the "move to end" target */}
+        <div
+          data-arrange-end={arranging ? 'block' : undefined}
+          className={cn('relative min-h-[120px]', arranging ? 'cursor-default' : 'cursor-text')}
+          onClick={handleAppendClick}
+        >
+          {!arranging && dropIndex === blocks.length && (
             <div className="pointer-events-none absolute left-0 right-0 top-0 h-[2px] rounded-full bg-primary" />
+          )}
+          {arranging && drag?.group === 'block' && drag?.dropIndex === blocks.length && (
+            <div className="pointer-events-none absolute left-0 right-0 top-0 z-10 h-[2px] rounded-full bg-emerald-600" />
           )}
         </div>
       </div>

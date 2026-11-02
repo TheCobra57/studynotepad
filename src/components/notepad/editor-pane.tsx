@@ -724,6 +724,7 @@ export function EditorPane({
 
       {/* Body — WYSIWYG block editor */}
       <div
+        data-arrange-scroll
         className={cn(
           'min-h-0 flex-1 overflow-y-auto px-4 py-3 md:px-6',
           focusMode !== 'off' && 'mx-auto w-full max-w-3xl px-6',
