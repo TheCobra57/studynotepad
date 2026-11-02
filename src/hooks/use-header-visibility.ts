@@ -95,7 +95,16 @@ export function useHeaderVisibility(
       lastTops.current.set(t, top)
       if (prev === undefined) return
       if (top - prev > 0 && top > HIDE_AFTER) setHidden(true)
-      else if (top - prev < 0) setHidden(false)
+      else if (top - prev < 0) {
+        // A negative delta while the container is pinned to its bottom edge is
+        // the browser clamping scrollTop — collapsing the header makes <main>
+        // taller, which shrinks every pane's scroll range. Reacting to those
+        // clamped events bounced the header at the end of a page instead of
+        // staying hidden; genuine upward scrolls move away from the bottom
+        // edge, so they still reveal it instantly.
+        const fromBottom = t.scrollHeight - t.clientHeight - top
+        if (fromBottom > 1) setHidden(false)
+      }
     }
     document.addEventListener('scroll', onScroll, { capture: true, passive: true })
     return () => document.removeEventListener('scroll', onScroll, { capture: true })
