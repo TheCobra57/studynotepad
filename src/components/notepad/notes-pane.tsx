@@ -5,17 +5,26 @@ import { formatDistanceToNow } from 'date-fns'
 import {
   Check,
   ChevronLeft,
+  Code2,
   FileUp,
+  FlaskConical,
   GripVertical,
+  Image as ImageIcon,
+  List,
+  ListTodo,
+  ListTree,
   MoreHorizontal,
   MoveVertical,
   Pin,
   PinOff,
   Plus,
+  Radical,
   Search,
   StickyNote,
+  Table as TableIcon,
   Trash2,
   X,
+  type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,10 +46,73 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { makeExcerpt } from '@/lib/notepad/constants'
+import {
+  EXCERPT_CHIP_LABELS,
+  makeExcerptSegments,
+  type ExcerptElement,
+  type ExcerptSegment,
+} from '@/lib/notepad/constants'
 import { sortNotes, useNotepadStore } from '@/lib/notepad/store'
 import { useArrange } from '@/hooks/use-arrange'
 import type { Note } from '@/lib/notepad/types'
+
+/** Same icon language as the / menu — a chip is recognisable at a glance */
+const EXCERPT_ICONS: Record<ExcerptElement, LucideIcon> = {
+  list: List,
+  checklist: ListTodo,
+  image: ImageIcon,
+  math: Radical,
+  chem: FlaskConical,
+  code: Code2,
+  table: TableIcon,
+  toc: ListTree,
+}
+
+function ExcerptChip({ segment }: { segment: Extract<ExcerptSegment, { kind: 'chip' }> }) {
+  const Icon = EXCERPT_ICONS[segment.element]
+  return (
+    <span
+      className="mx-0.5 inline-flex translate-y-px items-center gap-1 rounded border bg-muted/70 px-1 py-px align-baseline text-[9px] font-semibold uppercase tracking-wider text-muted-foreground"
+      title={`${EXCERPT_CHIP_LABELS[segment.element]}${segment.meta ? ` — ${segment.meta}` : ''}`}
+    >
+      <Icon className="h-2.5 w-2.5 shrink-0" aria-hidden />
+      {EXCERPT_CHIP_LABELS[segment.element]}
+      {segment.meta && (
+        <span className="font-medium normal-case tracking-normal text-muted-foreground/80">
+          {segment.meta}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/** Two-line note preview: readable text + named chips for special blocks */
+function NoteExcerpt({ note }: { note: Note }) {
+  const segments = useMemo(() => makeExcerptSegments(note.content), [note.content])
+  if (segments.length === 0) {
+    return <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">Empty note</p>
+  }
+  return (
+    <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+      {segments.map((seg, i) =>
+        seg.kind === 'text' ? (
+          <span
+            key={i}
+            className={cn(
+              seg.emphasis && 'font-medium text-foreground/80',
+              seg.quote && 'italic',
+            )}
+          >
+            {seg.text}
+            {i < segments.length - 1 && ' '}
+          </span>
+        ) : (
+          <ExcerptChip key={i} segment={seg} />
+        ),
+      )}
+    </p>
+  )
+}
 
 interface NotesPaneProps {
   onBack?: () => void
@@ -283,9 +355,7 @@ export function NotesPane({ onBack, onOpenNote, onImportMd }: NotesPaneProps) {
                         {note.title || 'Untitled note'}
                       </p>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                      {makeExcerpt(note.content) || 'Empty note'}
-                    </p>
+                    <NoteExcerpt note={note} />
                     <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
                       {searching && noteSubject && noteChapter && (
                         <span
