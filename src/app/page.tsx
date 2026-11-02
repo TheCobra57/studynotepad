@@ -8,6 +8,8 @@ import {
   FileUp,
   GraduationCap,
   HardDrive,
+  Pin,
+  PinOff,
   Trash2,
   Upload,
 } from 'lucide-react'
@@ -35,6 +37,7 @@ import { cn } from '@/lib/utils'
 import { useNotepadStore, useSelectedNote } from '@/lib/notepad/store'
 import type { EditorFocusMode, MobileView, NotepadBackup } from '@/lib/notepad/types'
 import { useToast } from '@/hooks/use-toast'
+import { useHeaderVisibility } from '@/hooks/use-header-visibility'
 import { Sidebar } from '@/components/notepad/sidebar'
 import { NotesPane } from '@/components/notepad/notes-pane'
 import { EditorPane } from '@/components/notepad/editor-pane'
@@ -62,7 +65,15 @@ export default function Home() {
   const [mdImportOpen, setMdImportOpen] = useState(false)
   const [focusMode, setFocusMode] = useState<EditorFocusMode>('off')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const mainRef = useRef<HTMLElement | null>(null)
   const selectedNote = useSelectedNote()
+  // Notion-style header: auto-hides while scrolling panes down, pinned via toggle
+  const {
+    hidden: headerHidden,
+    pinned: headerPinned,
+    togglePinned: toggleHeaderPinned,
+    show: showHeader,
+  } = useHeaderVisibility(mainRef, focusMode !== 'off')
   // saved data is read from IndexedDB asynchronously — keep the splash up
   // until it lands so the real notes render without a seed-data flash
   const hasHydrated = useNotepadStore((s) => s.hasHydrated)
@@ -87,6 +98,7 @@ export default function Home() {
 
   const enterFocus = (mode: Exclude<EditorFocusMode, 'off'>) => {
     setFocusMode(mode)
+    showHeader() // come back visible when the focus mode ends
     // true fullscreen also hides the browser chrome when allowed (may be
     // blocked inside sandboxed iframes — the layout focus still applies)
     if (mode === 'fullscreen') {
@@ -96,6 +108,7 @@ export default function Home() {
 
   const exitFocus = () => {
     setFocusMode('off')
+    showHeader()
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
   }
 
@@ -222,9 +235,17 @@ export default function Home() {
   return (
     <>
       <div className="flex h-dvh flex-col bg-background text-foreground">
-      {/* Header — hidden while a focus mode is active */}
+      {/* Header — slides away while scrolling panes down (unless pinned);
+          fully hidden while a focus mode is active */}
       {!focusActive && (
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
+        <header
+          inert={headerHidden}
+          className={cn(
+            'shrink-0 overflow-hidden transition-[height] duration-200 ease-out',
+            headerHidden ? 'h-0' : 'h-14',
+          )}
+        >
+        <div className="flex h-14 items-center gap-3 border-b px-4">
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
             <GraduationCap className="h-5 w-5" />
@@ -239,6 +260,24 @@ export default function Home() {
         </Badge>
 
         <div className="ml-auto flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            aria-label={
+              headerPinned
+                ? 'Unpin header — it will auto-hide while scrolling'
+                : 'Pin header — always visible'
+            }
+            title={
+              headerPinned
+                ? 'Unpin header (auto-hides while scrolling)'
+                : 'Pin header (always visible)'
+            }
+            onClick={toggleHeaderPinned}
+          >
+            {headerPinned ? <Pin className="h-4 w-4" /> : <PinOff className="h-4 w-4" />}
+          </Button>
           <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setCheatOpen(true)}>
             <BookOpen className="h-4 w-4" />
             <span className="hidden md:inline">Cheat sheet</span>
@@ -269,11 +308,12 @@ export default function Home() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        </div>
       </header>
       )}
 
       {/* Panes — in focus mode only the editor remains */}
-      <main className="flex min-h-0 flex-1">
+      <main ref={mainRef} className="flex min-h-0 flex-1">
         <aside
           className={cn(
             'w-full shrink-0 overflow-y-auto border-r bg-muted/20 lg:w-64',
