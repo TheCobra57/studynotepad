@@ -82,7 +82,6 @@ interface SlashState {
   start: number
   query: string
   index: number
-  flip: boolean
 }
 
 const TYPO: Partial<Record<BlockType, string>> = {
@@ -625,14 +624,11 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         const m = value.slice(0, caret).match(/(?:^|\s)\/([\w-]*)$/)
         if (m) {
           const query = m[1].toLowerCase()
-          const rect = e.target.getBoundingClientRect()
-          const flip = rect.bottom + 340 > window.innerHeight
           setSlash((prev) => ({
             id: block.id,
             start: caret - m[1].length - 1,
             query,
             index: prev && prev.query === query ? prev.index : 0,
-            flip,
           }))
           return
         }
@@ -742,7 +738,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       cancelBlurDeactivate()
       setActiveId(id)
       focusBlock(id, 'end')
-      setSlash((prev) => ({ id, start: 0, query: '', index: 0, flip: prev?.flip ?? false }))
+      setSlash({ id, start: 0, query: '', index: 0 })
     }
 
     const handlePlusClick = (id: string) => {
@@ -1809,7 +1805,6 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                     commands={slashCommands}
                     activeIndex={slash.index}
                     query={slash.query}
-                    flip={slash.flip}
                     onSelect={applyCommand}
                     onHover={(i) => setSlash((p) => (p ? { ...p, index: i } : p))}
                   />

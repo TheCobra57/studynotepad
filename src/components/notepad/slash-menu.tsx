@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Brush,
   Clipboard,
@@ -48,39 +48,110 @@ interface SlashMenuProps {
   commands: SlashCommand[]
   activeIndex: number
   query: string
-  /** open upwards when the block sits near the bottom of the viewport */
-  flip?: boolean
   onSelect: (cmd: SlashCommand) => void
   onHover: (index: number) => void
 }
 
+/** placement computed from live viewport measurements */
+interface Placement {
+  /** open upwards when the anchor row sits low in the viewport */
+  up: boolean
+  /** pixel cap for the whole menu — the list scrolls inside, footer stays visible */
+  maxH: number
+}
+
+/** anchor margin (mt-1/mb-1) + a little breathing room */
+const GUTTER = 8
+/** space we'd like before flipping to the other side (~4 rows + footer) */
+const MIN_COMFY = 176
+/** smallest usable menu (footer + ~1 row); below this overlap beats a sliver */
+const MIN_HARD = 96
+/** never taller than this, even on huge screens */
+const MAX_MENU = 360
+
 /**
  * Floating command palette opened by typing "/" (or the + gutter button).
  * Keyboard navigation is handled by the parent editor; this menu is
- * presentational and scrolls the highlighted row into view.
+ * presentational, scrolls the highlighted row into view, and places itself
+ * above or below the anchor block depending on which side has more room —
+ * clamping its height to the space actually available so it is never cut off
+ * by the viewport edge or the on-screen keyboard (visualViewport aware).
  */
-export function SlashMenu({
-  commands,
-  activeIndex,
-  query,
-  flip = false,
-  onSelect,
-  onHover,
-}: SlashMenuProps) {
+export function SlashMenu({ commands, activeIndex, query, onSelect, onHover }: SlashMenuProps) {
   const listRef = useRef<HTMLDivElement>(null)
+  /** the block row this menu is anchored to (assigned in the root ref callback) */
+  const anchorRef = useRef<HTMLElement | null>(null)
+  const [placement, setPlacement] = useState<Placement | null>(null)
 
+  // keep the highlighted row in view while navigating with the keyboard
   useEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`)
     el?.scrollIntoView({ block: 'nearest' })
   }, [activeIndex])
 
+  // ---- dynamic placement ------------------------------------------------
+  // Measure the anchor row against the viewport and pick side + height cap.
+  const measure = useCallback(() => {
+    const anchor = anchorRef.current
+    if (!anchor) return
+
+    const rect = anchor.getBoundingClientRect()
+    // visualViewport shrinks when the on-screen keyboard opens — prefer it
+    const vh = window.visualViewport?.height ?? window.innerHeight
+    const below = vh - rect.bottom - GUTTER
+    const above = rect.top - GUTTER
+
+    // down while there's room; up when the row sits low; else the roomier side
+    const up = below >= MIN_COMFY ? false : above >= MIN_COMFY ? true : above > below
+    const space = Math.max(up ? above : below, MIN_HARD)
+    const maxH = Math.min(space, MAX_MENU)
+
+    setPlacement((prev) => (prev && prev.up === up && prev.maxH === maxH ? prev : { up, maxH }))
+  }, [])
+
+  // The initial measurement runs from a ref callback — during commit, before
+  // the first paint — so the menu never flashes on the wrong side.
+  const attachRoot = useCallback(
+    (el: HTMLDivElement | null) => {
+      anchorRef.current = el?.parentElement ?? null
+      measure()
+    },
+    [measure],
+  )
+
+  // Keep placement live: the anchor row resizes while typing (textarea
+  // auto-grows), the page scrolls, the window resizes, and the on-screen
+  // keyboard opens/closes — all covered by these passive observers.
+  useEffect(() => {
+    const ro = new ResizeObserver(() => measure())
+    if (anchorRef.current) ro.observe(anchorRef.current)
+    window.addEventListener('resize', measure)
+    window.addEventListener('scroll', measure, true) // capture: editor pane scrolls too
+    const vv = window.visualViewport
+    vv?.addEventListener('resize', measure)
+    vv?.addEventListener('scroll', measure)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', measure, true)
+      vv?.removeEventListener('resize', measure)
+      vv?.removeEventListener('scroll', measure)
+    }
+  }, [measure])
+
+  const pos: Placement = placement ?? { up: false, maxH: MAX_MENU }
+
+  const rootClass = cn(
+    'absolute left-0 z-40 w-[300px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border bg-popover shadow-lg',
+    pos.up ? 'bottom-full mb-1' : 'top-full mt-1',
+  )
+
   if (commands.length === 0) {
     return (
       <div
-        className={cn(
-          'absolute left-0 z-40 w-[300px] overflow-hidden rounded-lg border bg-popover shadow-lg',
-          flip ? 'bottom-full mb-1' : 'top-full mt-1',
-        )}
+        ref={attachRoot}
+        className={rootClass}
+        style={{ maxHeight: pos.maxH }}
         role="listbox"
         aria-label="Insert menu"
       >
@@ -93,15 +164,14 @@ export function SlashMenu({
 
   return (
     <div
-      className={cn(
-        'absolute left-0 z-40 w-[300px] overflow-hidden rounded-lg border bg-popover shadow-lg',
-        flip ? 'bottom-full mb-1' : 'top-full mt-1',
-      )}
+      ref={attachRoot}
+      className={cn(rootClass, 'flex flex-col')}
+      style={{ maxHeight: pos.maxH }}
       role="listbox"
       aria-label="Insert menu"
       onMouseDown={(e) => e.preventDefault()} // keep the textarea focused
     >
-      <div ref={listRef} className="max-h-72 overflow-y-auto p-1">
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1">
         {commands.map((cmd, i) => {
           const Icon = ICONS[cmd.icon]
           return (
@@ -146,7 +216,7 @@ export function SlashMenu({
           )
         })}
       </div>
-      <div className="flex items-center gap-2 border-t bg-muted/50 px-3 py-1.5 text-[11px] text-muted-foreground">
+      <div className="flex shrink-0 items-center gap-2 border-t bg-muted/50 px-3 py-1.5 text-[11px] text-muted-foreground">
         <GripHorizontal className="h-3 w-3" aria-hidden />
         <span>↑↓ navigate</span>
         <span aria-hidden>·</span>
