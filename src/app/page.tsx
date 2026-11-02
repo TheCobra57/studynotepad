@@ -10,6 +10,7 @@ import {
   HardDrive,
   Pin,
   PinOff,
+  SlidersHorizontal,
   Trash2,
   Upload,
 } from 'lucide-react'
@@ -47,6 +48,7 @@ import { ThemeToggle } from '@/components/notepad/theme-toggle'
 import { PrintRoot } from '@/components/notepad/print-root'
 import { PrintDialog } from '@/components/notepad/print-dialog'
 import { MdImportDialog } from '@/components/notepad/md-import-dialog'
+import { SettingsDialog } from '@/components/notepad/settings-dialog'
 
 const emptySubscribe = () => () => {}
 
@@ -63,6 +65,7 @@ export default function Home() {
   const [clearOpen, setClearOpen] = useState(false)
   const [printOpen, setPrintOpen] = useState(false)
   const [mdImportOpen, setMdImportOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [focusMode, setFocusMode] = useState<EditorFocusMode>('off')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mainRef = useRef<HTMLElement | null>(null)
@@ -296,6 +299,10 @@ export default function Home() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
+                <SlidersHorizontal className="h-4 w-4" /> Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs">Backup & data</DropdownMenuLabel>
               <DropdownMenuItem onClick={handleExport}>
                 <Download className="h-4 w-4" /> Export backup (.json)
@@ -388,6 +395,7 @@ export default function Home() {
 
       <CheatSheet open={cheatOpen} onOpenChange={setCheatOpen} />
       <WelcomeDialog onChoose={handleWelcomeChoice} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <MdImportDialog
         open={mdImportOpen}
         onOpenChange={setMdImportOpen}

@@ -88,14 +88,14 @@ interface SlashState {
 }
 
 const TYPO: Partial<Record<BlockType, string>> = {
-  p: 'text-[15px] leading-7',
-  h1: 'text-[26px] font-bold leading-[2.25rem] tracking-tight md:text-[28px] md:leading-[2.4rem]',
-  h2: 'text-[21px] font-semibold leading-[1.85rem] tracking-tight md:text-[22px]',
-  h3: 'text-[17px] font-semibold leading-7 tracking-tight',
-  bullet: 'text-[15px] leading-7',
-  numbered: 'text-[15px] leading-7',
-  todo: 'text-[15px] leading-7',
-  quote: 'text-[15px] leading-7',
+  p: 'text-(length:--note-font-size) leading-7',
+  h1: 'text-(length:--note-h1-size) font-bold leading-[2.25rem] tracking-tight md:text-(length:--note-h1-size-md) md:leading-[2.4rem]',
+  h2: 'text-(length:--note-h2-size) font-semibold leading-[1.85rem] tracking-tight md:text-(length:--note-h2-size-md)',
+  h3: 'text-(length:--note-h3-size) font-semibold leading-7 tracking-tight',
+  bullet: 'text-(length:--note-font-size) leading-7',
+  numbered: 'text-(length:--note-font-size) leading-7',
+  todo: 'text-(length:--note-font-size) leading-7',
+  quote: 'text-(length:--note-font-size) leading-7',
 }
 
 const SPACING: Record<BlockType, string> = {
@@ -1152,7 +1152,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           onBlur={(e) => handleBlurDeactivate(block.id, e.relatedTarget)}
           className={cn(
             'w-full resize-none bg-transparent outline-none placeholder:text-muted-foreground/50',
-            TYPO[block.type] ?? 'text-[15px] leading-7',
+            TYPO[block.type] ?? 'text-(length:--note-font-size) leading-7',
             block.type === 'todo' && block.checked && 'text-muted-foreground line-through',
           )}
         />
@@ -1172,7 +1172,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         case 'numbered':
           return (
             <div className="flex items-start gap-2">
-              <span className="w-4 shrink-0 text-right text-[15px] leading-7 tabular-nums text-muted-foreground">
+              <span className="w-4 shrink-0 text-right text-(length:--note-font-size) leading-7 tabular-nums text-muted-foreground">
                 {numberAt(idx)}.
               </span>
               <div className="min-w-0 flex-1">{ta}</div>
@@ -1233,7 +1233,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           return (
             <h1
               {...interactive}
-              className="cursor-text text-[26px] font-bold leading-[2.25rem] tracking-tight outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring md:text-[28px] md:leading-[2.4rem]"
+              className="cursor-text text-(length:--note-h1-size) font-bold leading-[2.25rem] tracking-tight outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring md:text-(length:--note-h1-size-md) md:leading-[2.4rem]"
             >
               {content}
             </h1>
@@ -1242,7 +1242,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           return (
             <h2
               {...interactive}
-              className="cursor-text text-[21px] font-semibold leading-[1.85rem] tracking-tight outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring md:text-[22px]"
+              className="cursor-text text-(length:--note-h2-size) font-semibold leading-[1.85rem] tracking-tight outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring md:text-(length:--note-h2-size-md)"
             >
               {content}
             </h2>
@@ -1251,7 +1251,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           return (
             <h3
               {...interactive}
-              className="cursor-text text-[17px] font-semibold leading-7 tracking-tight outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring"
+              className="cursor-text text-(length:--note-h3-size) font-semibold leading-7 tracking-tight outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring"
             >
               {content}
             </h3>
@@ -1263,16 +1263,16 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                 className="mt-[11px] h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/70"
                 aria-hidden
               />
-              <div className="min-w-0 flex-1 text-[15px] leading-7">{content}</div>
+              <div className="min-w-0 flex-1 text-(length:--note-font-size) leading-7">{content}</div>
             </div>
           )
         case 'numbered':
           return (
             <div {...interactive} className="flex cursor-text items-start gap-2 outline-none">
-              <span className="w-4 shrink-0 text-right text-[15px] leading-7 tabular-nums text-muted-foreground">
+              <span className="w-4 shrink-0 text-right text-(length:--note-font-size) leading-7 tabular-nums text-muted-foreground">
                 {numberAt(idx)}.
               </span>
-              <div className="min-w-0 flex-1 text-[15px] leading-7">{content}</div>
+              <div className="min-w-0 flex-1 text-(length:--note-font-size) leading-7">{content}</div>
             </div>
           )
         case 'todo':
@@ -1287,7 +1287,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
               <div
                 {...interactive}
                 className={cn(
-                  'min-w-0 flex-1 cursor-text text-[15px] leading-7 outline-none',
+                  'min-w-0 flex-1 cursor-text text-(length:--note-font-size) leading-7 outline-none',
                   block.checked && 'text-muted-foreground line-through',
                 )}
               >
@@ -1299,7 +1299,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           return (
             <div
               {...interactive}
-              className="cursor-text rounded-r-md border-l-[3px] border-emerald-600/50 bg-muted/40 py-1 pl-3.5 pr-2 text-[15px] leading-7 outline-none"
+              className="cursor-text rounded-r-md border-l-[3px] border-emerald-600/50 bg-muted/40 py-1 pl-3.5 pr-2 text-(length:--note-font-size) leading-7 outline-none"
             >
               {content}
             </div>
@@ -1308,7 +1308,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           return (
             <div
               {...interactive}
-              className="min-h-[28px] cursor-text text-[15px] leading-7 outline-none"
+              className="min-h-[28px] cursor-text text-(length:--note-font-size) leading-7 outline-none"
             >
               {content}
             </div>
@@ -1497,7 +1497,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
               className="w-full resize-none bg-transparent font-mono text-[12px] leading-5 outline-none placeholder:text-muted-foreground/50"
             />
             <div className="mt-2 overflow-x-auto rounded-md border bg-background p-2 [&_table]:my-0">
-              <MarkdownPreview content={block.text} />
+              <MarkdownPreview content={block.text} className="text-(length:--note-font-size)" />
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">
               Markdown table · live preview above · Esc to finish
@@ -1519,7 +1519,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           }}
           className="block-math min-h-[44px] cursor-text overflow-x-auto rounded-md outline-none hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring [&_table]:my-0"
         >
-          <MarkdownPreview content={block.text} />
+          <MarkdownPreview content={block.text} className="text-(length:--note-font-size)" />
         </div>
       )
     }

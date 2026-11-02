@@ -90,10 +90,14 @@ function ExcerptChip({ segment }: { segment: Extract<ExcerptSegment, { kind: 'ch
 function NoteExcerpt({ note }: { note: Note }) {
   const segments = useMemo(() => makeExcerptSegments(note.content), [note.content])
   if (segments.length === 0) {
-    return <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">Empty note</p>
+    return (
+      <p className="mt-1 line-clamp-2 text-[length:calc(var(--note-font-size)*0.8)] leading-5 text-muted-foreground">
+        Empty note
+      </p>
+    )
   }
   return (
-    <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+    <p className="mt-1 line-clamp-2 text-[length:calc(var(--note-font-size)*0.8)] leading-5 text-muted-foreground">
       {segments.map((seg, i) =>
         seg.kind === 'text' ? (
           <span

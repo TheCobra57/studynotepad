@@ -76,6 +76,60 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* ---------- appearance prefs (Settings menu, see src/lib/prefs.ts) ---------- */
+
+  /* app font + note text scale are switched by <html data-app-font / data-note-size>
+     (set from the prefs store); the font families come from next/font variables
+     on <html>. NOTE: font-family must reference the next/font vars DIRECTLY —
+     the CSS optimizer mangles var→var indirection in plain declarations. */
+
+  /* note text scale: consumed by the block editor, the markdown preview and
+     the notes-list excerpt */
+  --note-font-size: 15px;
+  --note-h1-size: 26px;
+  --note-h1-size-md: 28px;
+  --note-h2-size: 21px;
+  --note-h2-size-md: 22px;
+  --note-h3-size: 17px;
+}
+
+html[data-app-font='literata'] body {
+  font-family: var(--font-literata), Georgia, serif;
+}
+html[data-app-font='lora'] body {
+  font-family: var(--font-lora), Georgia, serif;
+}
+html[data-app-font='merriweather'] body {
+  font-family: var(--font-merriweather), Georgia, serif;
+}
+html[data-app-font='source-serif'] body {
+  font-family: var(--font-source-serif), Georgia, serif;
+}
+
+html[data-note-size='sm'] {
+  --note-font-size: 13.5px;
+  --note-h1-size: 23px;
+  --note-h1-size-md: 25px;
+  --note-h2-size: 19px;
+  --note-h2-size-md: 20px;
+  --note-h3-size: 15.5px;
+}
+html[data-note-size='lg'] {
+  --note-font-size: 16.5px;
+  --note-h1-size: 28px;
+  --note-h1-size-md: 30px;
+  --note-h2-size: 23px;
+  --note-h2-size-md: 24px;
+  --note-h3-size: 18.5px;
+}
+html[data-note-size='xl'] {
+  --note-font-size: 18px;
+  --note-h1-size: 30px;
+  --note-h1-size-md: 32px;
+  --note-h2-size: 25px;
+  --note-h2-size-md: 26px;
+  --note-h3-size: 20px;
 }
 
 .dark {
@@ -118,6 +172,9 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* app-wide font family (Settings → Font); code blocks keep font-mono.
+       Referenced directly — see the optimizer note above. */
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   }
 }
 
@@ -146,8 +203,10 @@
 }
 
 /* ---------- Markdown preview (note preview pane) ---------- */
+/* base font-size comes from the text-(length:--note-font-size) utility on the
+   element — kept out of this rule because the optimizer would inline it */
 .markdown-body {
-  @apply text-[15px] leading-7 text-foreground;
+  @apply leading-7 text-foreground;
   overflow-wrap: break-word;
 }
 .markdown-body > :first-child {
@@ -257,8 +316,9 @@
 }
 
 /* ---------- WYSIWYG block editor ---------- */
+/* see .markdown-body note — font-size applied via utility on the element */
 .block-inline {
-  @apply text-[15px] leading-7;
+  @apply leading-7;
   overflow-wrap: break-word;
 }
 .block-inline code {

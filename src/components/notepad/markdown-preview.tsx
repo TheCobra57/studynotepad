@@ -216,7 +216,7 @@ export function MarkdownPreview({
 /** Renders a single line of inline markdown (bold, links, `code`, $math$) without block margins */
 export function InlineMarkdown({ text }: { text: string }) {
   return (
-    <span className="block-inline">
+    <span className="block-inline text-(length:--note-font-size)">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[
