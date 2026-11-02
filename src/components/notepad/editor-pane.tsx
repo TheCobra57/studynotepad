@@ -1,6 +1,6 @@
 'use client'
 
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import {
   BookOpen,
@@ -77,6 +77,12 @@ interface EditorPaneProps {
   focusMode?: EditorFocusMode
   onEnterFocus?: (mode: 'area' | 'fullscreen') => void
   onExitFocus?: () => void
+  /** editor toolbar auto-hide state — shared chrome behaviour with the app header */
+  toolbarHidden?: boolean
+  toolbarPinned?: boolean
+  onToggleToolbarPinned?: () => void
+  /** called when anything inside the pane gains focus — brings the toolbar back */
+  onRevealToolbar?: () => void
 }
 
 export function EditorPane({
@@ -87,6 +93,10 @@ export function EditorPane({
   focusMode = 'off',
   onEnterFocus,
   onExitFocus,
+  toolbarHidden = false,
+  toolbarPinned = true,
+  onToggleToolbarPinned,
+  onRevealToolbar,
 }: EditorPaneProps) {
   const note = useSelectedNote()
   const chapters = useNotepadStore((s) => s.chapters)
@@ -106,6 +116,14 @@ export function EditorPane({
   useLayoutEffect(() => {
     autoResize(titleRef.current)
   }, [note?.id, note?.title])
+
+  // re-measure on viewport changes too — resizing the window re-wraps the
+  // title, and the stale height would clip the extra lines
+  useEffect(() => {
+    const onResize = () => autoResize(titleRef.current)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const chapter = note ? chapters.find((c) => c.id === note.chapterId) : null
   const subject = chapter ? subjects.find((s) => s.id === chapter.subjectId) : null
@@ -299,7 +317,13 @@ export function EditorPane({
   const chemTemplates = FORMULA_TEMPLATES.filter((t) => t.category === 'chem')
 
   return (
-    <div className="flex h-full min-w-0 flex-col">
+    <div
+      className="flex h-full min-w-0 flex-col"
+      // focusing anything in the pane (a block, the title, the top bar)
+      // brings the toolbar back — writing at the bottom of a long note must
+      // never leave you without it
+      onFocusCapture={onRevealToolbar}
+    >
       {/* Top bar */}
       <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
         {onBack && focusMode === 'off' && (
@@ -384,6 +408,29 @@ export function EditorPane({
             </Button>
           )}
 
+          {/* Toolbar pin — keep the formatting toolbar always visible, or let
+              it slide away with the app header while scrolling for extra space */}
+          {onToggleToolbarPinned && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              aria-label={
+                toolbarPinned
+                  ? 'Unpin toolbar — it will auto-hide while scrolling'
+                  : 'Pin toolbar — always visible'
+              }
+              title={
+                toolbarPinned
+                  ? 'Unpin toolbar (auto-hides while scrolling)'
+                  : 'Pin toolbar (always visible)'
+              }
+              onClick={onToggleToolbarPinned}
+            >
+              {toolbarPinned ? <Pin className="h-4 w-4" /> : <PinOff className="h-4 w-4" />}
+            </Button>
+          )}
+
           {onPrint && (
             <Button
               variant="outline"
@@ -426,214 +473,226 @@ export function EditorPane({
       </div>
 
       {/* Toolbar — two fixed rows (never wraps: heights stay deterministic,
-          and each row scrolls horizontally when the pane is narrow) */}
-      <div className="shrink-0 border-b bg-muted/30">
-        {/* row 1 — block structure & text formatting */}
-        <div
-          className="toolbar-scroll flex items-center gap-0.5 overflow-x-auto px-3 py-1.5"
-          role="toolbar"
-          aria-label="Formatting"
-        >
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-8 gap-1 px-2 font-mono text-xs">
-              <span className="font-bold">H</span>
-              <ChevronDown className="h-3 w-3 opacity-60" />
-              <span className="sr-only">Heading</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={() => editorRef.current?.transformActive('h1')}>
-              <Heading1 className="h-4 w-4" /> Heading 1
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => editorRef.current?.transformActive('h2')}>
-              <Heading2 className="h-4 w-4" /> Heading 2
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => editorRef.current?.transformActive('h3')}>
-              <Heading3 className="h-4 w-4" /> Heading 3
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          and each row scrolls horizontally when the pane is narrow). The
+          outer 0fr/1fr grid row animates to whatever the rows measure, so
+          the collapse never needs a hardcoded height. */}
+      <div
+        className={cn(
+          'grid shrink-0 transition-[grid-template-rows] duration-200 ease-out',
+          toolbarHidden ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]',
+        )}
+        inert={toolbarHidden}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="border-b bg-muted/30">
+            {/* row 1 — block structure & text formatting */}
+            <div
+              className="toolbar-scroll flex items-center gap-0.5 overflow-x-auto px-3 py-1.5"
+              role="toolbar"
+              aria-label="Formatting"
+            >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 gap-1 px-2 font-mono text-xs">
+                  <span className="font-bold">H</span>
+                  <ChevronDown className="h-3 w-3 opacity-60" />
+                  <span className="sr-only">Heading</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => editorRef.current?.transformActive('h1')}>
+                  <Heading1 className="h-4 w-4" /> Heading 1
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editorRef.current?.transformActive('h2')}>
+                  <Heading2 className="h-4 w-4" /> Heading 2
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editorRef.current?.transformActive('h3')}>
+                  <Heading3 className="h-4 w-4" /> Heading 3
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-        <Separator orientation="vertical" className="mx-1 h-5" />
+            <Separator orientation="vertical" className="mx-1 h-5" />
 
-        <ToolbarButton label="Bold (Ctrl+B)" onClick={() => tryWrap('**', '**', 'bold text')}>
-          <span className="text-[13px] font-bold">B</span>
-        </ToolbarButton>
-        <ToolbarButton label="Italic (Ctrl+I)" onClick={() => tryWrap('*', '*', 'italic text')}>
-          <Italic className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton label="Inline code (Ctrl+E)" onClick={() => tryWrap('`', '`', 'code')}>
-          <Code className="h-4 w-4" />
-        </ToolbarButton>
+            <ToolbarButton label="Bold (Ctrl+B)" onClick={() => tryWrap('**', '**', 'bold text')}>
+              <span className="text-[13px] font-bold">B</span>
+            </ToolbarButton>
+            <ToolbarButton label="Italic (Ctrl+I)" onClick={() => tryWrap('*', '*', 'italic text')}>
+              <Italic className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton label="Inline code (Ctrl+E)" onClick={() => tryWrap('`', '`', 'code')}>
+              <Code className="h-4 w-4" />
+            </ToolbarButton>
 
-        <Separator orientation="vertical" className="mx-1 h-5" />
+            <Separator orientation="vertical" className="mx-1 h-5" />
 
-        <ToolbarButton
-          label="Bulleted list"
-          onClick={() => editorRef.current?.transformActive('bullet')}
-        >
-          <List className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Numbered list"
-          onClick={() => editorRef.current?.transformActive('numbered')}
-        >
-          <ListOrdered className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          label="To-do list"
-          onClick={() => editorRef.current?.transformActive('todo')}
-        >
-          <ListTodo className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton label="Quote" onClick={() => editorRef.current?.transformActive('quote')}>
-          <Quote className="h-4 w-4" />
-        </ToolbarButton>
+            <ToolbarButton
+              label="Bulleted list"
+              onClick={() => editorRef.current?.transformActive('bullet')}
+            >
+              <List className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Numbered list"
+              onClick={() => editorRef.current?.transformActive('numbered')}
+            >
+              <ListOrdered className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              label="To-do list"
+              onClick={() => editorRef.current?.transformActive('todo')}
+            >
+              <ListTodo className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton label="Quote" onClick={() => editorRef.current?.transformActive('quote')}>
+              <Quote className="h-4 w-4" />
+            </ToolbarButton>
 
-        <Separator orientation="vertical" className="mx-1 h-5" />
+            <Separator orientation="vertical" className="mx-1 h-5" />
 
-        <ToolbarButton
-          label="Table"
-          onClick={() => editorRef.current?.transformActive('table')}
-        >
-          <Table className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Code block"
-          onClick={() => editorRef.current?.transformActive('code')}
-        >
-          <Code className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Divider"
-          onClick={() => editorRef.current?.transformActive('divider')}
-        >
-          <Minus className="h-4 w-4" />
-        </ToolbarButton>
-        </div>
+            <ToolbarButton
+              label="Table"
+              onClick={() => editorRef.current?.transformActive('table')}
+            >
+              <Table className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Code block"
+              onClick={() => editorRef.current?.transformActive('code')}
+            >
+              <Code className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Divider"
+              onClick={() => editorRef.current?.transformActive('divider')}
+            >
+              <Minus className="h-4 w-4" />
+            </ToolbarButton>
+            </div>
 
-        {/* row 2 — math, chemistry, images & whiteboard */}
-        <div
-          className="toolbar-scroll flex items-center gap-0.5 overflow-x-auto border-t border-border/60 px-3 py-1.5"
-          role="toolbar"
-          aria-label="Insert"
-        >
-        <ToolbarButton
-          label="Inline math — $…$"
-          onClick={() => tryWrap('$', '$', 'x^2')}
-          className="font-serif"
-        >
-          <span className="font-serif text-[15px]">x</span>
-        </ToolbarButton>
-        <ToolbarButton
-          label="Equation block"
-          onClick={() => editorRef.current?.insertMathBlock()}
-        >
-          <Sigma className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Chemical equation"
-          onClick={() => editorRef.current?.insertMathBlock('\\ce{}', -1)}
-        >
-          <FlaskConical className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-        </ToolbarButton>
-
-        {/* Formula templates */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 gap-1.5 px-2 text-xs"
-              title="Insert a formula template"
+            {/* row 2 — math, chemistry, images & whiteboard */}
+            <div
+              className="toolbar-scroll flex items-center gap-0.5 overflow-x-auto border-t border-border/60 px-3 py-1.5"
+              role="toolbar"
+              aria-label="Insert"
+            >
+            <ToolbarButton
+              label="Inline math — $…$"
+              onClick={() => tryWrap('$', '$', 'x^2')}
+              className="font-serif"
+            >
+              <span className="font-serif text-[15px]">x</span>
+            </ToolbarButton>
+            <ToolbarButton
+              label="Equation block"
+              onClick={() => editorRef.current?.insertMathBlock()}
+            >
+              <Sigma className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Chemical equation"
+              onClick={() => editorRef.current?.insertMathBlock('\\ce{}', -1)}
             >
               <FlaskConical className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-              Formulas
-              <ChevronDown className="h-3 w-3 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-[340px]">
-            <DropdownMenuLabel className="flex items-center gap-1.5 text-xs">
-              <FlaskConical className="h-3.5 w-3.5" /> Chemistry
-            </DropdownMenuLabel>
-            {chemTemplates.map((t) => (
-              <DropdownMenuItem
-                key={t.id}
-                className="flex items-center justify-between gap-3"
-                onClick={() => insertTemplate(t.insert)}
-              >
-                <span className="text-xs">{t.label}</span>
-                <Latex tex={t.preview} className="text-muted-foreground" />
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="flex items-center gap-1.5 text-xs">
-              <Sigma className="h-3.5 w-3.5" /> Mathematics
-            </DropdownMenuLabel>
-            {mathTemplates.map((t) => (
-              <DropdownMenuItem
-                key={t.id}
-                className="flex items-center justify-between gap-3"
-                onClick={() => insertTemplate(t.insert)}
-              >
-                <span className="text-xs">{t.label}</span>
-                <Latex tex={t.preview} className="text-muted-foreground" />
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </ToolbarButton>
 
-        {/* Image insert dropdown — upload / clipboard / whiteboard */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 gap-1.5 px-2 text-xs"
-              title="Insert an image"
-            >
-              <ImageIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              Images
-              <ChevronDown className="h-3 w-3 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-60">
-            <DropdownMenuItem onClick={() => handleImageAction('upload')}>
-              <ImagePlus className="h-4 w-4" />
-              <span className="flex-1">Upload image…</span>
-              <span className="text-[10px] text-muted-foreground">file</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleImageAction('clipboard')}>
-              <Clipboard className="h-4 w-4" />
-              <span className="flex-1">Paste from clipboard</span>
-              <span className="text-[10px] text-muted-foreground">Ctrl+V</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleImageAction('whiteboard')}>
-              <Brush className="h-4 w-4" />
-              <span className="flex-1">Draw on whiteboard…</span>
-              <span className="text-[10px] text-muted-foreground">sketch</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <p className="px-2 pb-1.5 text-[11px] leading-snug text-muted-foreground">
-              You can also drag &amp; drop image files onto the note, or just press Ctrl+V while
-              writing.
-            </p>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            {/* Formula templates */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 px-2 text-xs"
+                  title="Insert a formula template"
+                >
+                  <FlaskConical className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  Formulas
+                  <ChevronDown className="h-3 w-3 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[340px]">
+                <DropdownMenuLabel className="flex items-center gap-1.5 text-xs">
+                  <FlaskConical className="h-3.5 w-3.5" /> Chemistry
+                </DropdownMenuLabel>
+                {chemTemplates.map((t) => (
+                  <DropdownMenuItem
+                    key={t.id}
+                    className="flex items-center justify-between gap-3"
+                    onClick={() => insertTemplate(t.insert)}
+                  >
+                    <span className="text-xs">{t.label}</span>
+                    <Latex tex={t.preview} className="text-muted-foreground" />
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="flex items-center gap-1.5 text-xs">
+                  <Sigma className="h-3.5 w-3.5" /> Mathematics
+                </DropdownMenuLabel>
+                {mathTemplates.map((t) => (
+                  <DropdownMenuItem
+                    key={t.id}
+                    className="flex items-center justify-between gap-3"
+                    onClick={() => insertTemplate(t.insert)}
+                  >
+                    <span className="text-xs">{t.label}</span>
+                    <Latex tex={t.preview} className="text-muted-foreground" />
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-        <div className="ml-auto flex items-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 gap-1.5 px-2 text-xs"
-            onClick={onOpenCheatSheet}
-            title="LaTeX & chemistry syntax guide"
-          >
-            <BookOpen className="h-4 w-4" />
-            <span className="hidden md:inline">Cheat sheet</span>
-          </Button>
-        </div>
+            {/* Image insert dropdown — upload / clipboard / whiteboard */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 px-2 text-xs"
+                  title="Insert an image"
+                >
+                  <ImageIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Images
+                  <ChevronDown className="h-3 w-3 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-60">
+                <DropdownMenuItem onClick={() => handleImageAction('upload')}>
+                  <ImagePlus className="h-4 w-4" />
+                  <span className="flex-1">Upload image…</span>
+                  <span className="text-[10px] text-muted-foreground">file</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleImageAction('clipboard')}>
+                  <Clipboard className="h-4 w-4" />
+                  <span className="flex-1">Paste from clipboard</span>
+                  <span className="text-[10px] text-muted-foreground">Ctrl+V</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleImageAction('whiteboard')}>
+                  <Brush className="h-4 w-4" />
+                  <span className="flex-1">Draw on whiteboard…</span>
+                  <span className="text-[10px] text-muted-foreground">sketch</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <p className="px-2 pb-1.5 text-[11px] leading-snug text-muted-foreground">
+                  You can also drag &amp; drop image files onto the note, or just press Ctrl+V while
+                  writing.
+                </p>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <div className="ml-auto flex items-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 px-2 text-xs"
+                onClick={onOpenCheatSheet}
+                title="LaTeX & chemistry syntax guide"
+              >
+                <BookOpen className="h-4 w-4" />
+                <span className="hidden md:inline">Cheat sheet</span>
+              </Button>
+            </div>
+            </div>
+          </div>
         </div>
       </div>
 

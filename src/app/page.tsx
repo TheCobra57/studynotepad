@@ -37,7 +37,7 @@ import { cn } from '@/lib/utils'
 import { useNotepadStore, useSelectedNote } from '@/lib/notepad/store'
 import type { EditorFocusMode, MobileView, NotepadBackup } from '@/lib/notepad/types'
 import { useToast } from '@/hooks/use-toast'
-import { useHeaderVisibility } from '@/hooks/use-header-visibility'
+import { useChromeVisibility } from '@/hooks/use-chrome-visibility'
 import { Sidebar } from '@/components/notepad/sidebar'
 import { NotesPane } from '@/components/notepad/notes-pane'
 import { EditorPane } from '@/components/notepad/editor-pane'
@@ -67,13 +67,19 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mainRef = useRef<HTMLElement | null>(null)
   const selectedNote = useSelectedNote()
-  // Notion-style header: auto-hides while scrolling panes down, pinned via toggle
+  // Notion-style chrome: the app header and the editor toolbar auto-hide while
+  // scrolling panes down; each can be pinned (kept always visible) separately.
+  // Opening a note always reveals both again.
   const {
-    hidden: headerHidden,
-    pinned: headerPinned,
-    togglePinned: toggleHeaderPinned,
-    show: showHeader,
-  } = useHeaderVisibility(mainRef, focusMode !== 'off')
+    header: { hidden: headerHidden, pinned: headerPinned, togglePinned: toggleHeaderPinned },
+    toolbar: {
+      hidden: toolbarHidden,
+      pinned: toolbarPinned,
+      togglePinned: toggleToolbarPinned,
+      show: showToolbar,
+    },
+    showAll: showChrome,
+  } = useChromeVisibility(mainRef, focusMode !== 'off', selectedNote?.id)
   // saved data is read from IndexedDB asynchronously — keep the splash up
   // until it lands so the real notes render without a seed-data flash
   const hasHydrated = useNotepadStore((s) => s.hasHydrated)
@@ -98,7 +104,7 @@ export default function Home() {
 
   const enterFocus = (mode: Exclude<EditorFocusMode, 'off'>) => {
     setFocusMode(mode)
-    showHeader() // come back visible when the focus mode ends
+    showChrome() // come back visible when the focus mode ends
     // true fullscreen also hides the browser chrome when allowed (may be
     // blocked inside sandboxed iframes — the layout focus still applies)
     if (mode === 'fullscreen') {
@@ -108,7 +114,7 @@ export default function Home() {
 
   const exitFocus = () => {
     setFocusMode('off')
-    showHeader()
+    showChrome()
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
   }
 
@@ -359,6 +365,10 @@ export default function Home() {
             focusMode={focusMode}
             onEnterFocus={enterFocus}
             onExitFocus={exitFocus}
+            toolbarHidden={toolbarHidden}
+            toolbarPinned={toolbarPinned}
+            onToggleToolbarPinned={toggleToolbarPinned}
+            onRevealToolbar={showToolbar}
           />
         </section>
       </main>
