@@ -84,6 +84,42 @@ export function isChemBlock(text: string): boolean {
   return /\\(ce|pu)\s*\{/.test(text)
 }
 
+/** a complete, renderable inline `$…$` span inside a block's raw text */
+export interface InlineMathSpan {
+  /** index of the opening `$` */
+  start: number
+  /** index just after the closing `$` */
+  end: number
+  /** LaTeX between the dollars */
+  tex: string
+}
+
+/**
+ * Find complete inline-math spans (`$…$`) in a block's raw text.
+ *
+ * Mirrors what remark-math accepts so the editor's live chips and the
+ * rendered preview agree: the content must be non-empty, may not start or
+ * end with a space, cannot cross a line break, `\$` escapes are ignored and
+ * dollars adjacent to `$$` (display math) never count.
+ */
+export function findInlineMathSpans(text: string): InlineMathSpan[] {
+  const spans: InlineMathSpan[] = []
+  if (!text.includes('$')) return spans
+  const re = /\$([^$\n]+?)\$/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text))) {
+    const start = m.index
+    const end = start + m[0].length
+    const inner = m[1]
+    if (!inner.trim()) continue // "$  $" — nothing to render
+    if (/^\s|\s$/.test(inner)) continue // remark-math rejects boundary spaces
+    if (start > 0 && (text[start - 1] === '\\' || text[start - 1] === '$')) continue
+    if (end < text.length && text[end] === '$') continue
+    spans.push({ start, end, tex: inner })
+  }
+  return spans
+}
+
 // ---------------------------------------------------------------------------
 
 // Bare markers ("2.", "-", "#") are accepted as EMPTY items so that empty

@@ -2,8 +2,10 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -34,6 +36,7 @@ import { cn } from '@/lib/utils'
 import {
   autoResize,
   createBlock,
+  findInlineMathSpans,
   isChemBlock,
   isMergeable,
   isTextual,
@@ -137,6 +140,173 @@ function blockSpacing(type: BlockType, isFirst: boolean): string {
 }
 
 // ---------------------------------------------------------------------------
+// live inline math
+// ---------------------------------------------------------------------------
+
+/** opaque chip background matching the surface under the textarea */
+const MATH_CHIP_SURFACE: Partial<Record<BlockType, string>> = {
+  // quotes sit on muted/40 — reproduce that base before darkening it
+  quote:
+    'bg-[color-mix(in_srgb,color-mix(in_srgb,var(--muted)_40%,var(--background))_94%,var(--foreground))]',
+}
+const MATH_CHIP_SURFACE_DEFAULT =
+  'bg-[color-mix(in_srgb,var(--background)_94%,var(--foreground))]'
+
+interface MathChipRect {
+  x: number
+  y: number
+  w: number
+  h: number
+  tex: string
+}
+
+/**
+ * Renders `$…$` spans of the text being edited as live KaTeX chips that float
+ * exactly over the raw characters (a mirrored text layer measures them).
+ *
+ * - A span only chips when the caret / selection stays clear of it — the
+ *   moment you type the closing `$` the equation renders finalised, while
+ *   lone `$` (and the span under the caret) stay raw so editing stays easy.
+ * - Chips ignore pointer events: clicking "the equation" actually clicks the
+ *   raw text underneath, dropping the caret inside the span, which flips it
+ *   back to source view automatically.
+ * - Each chip gets a small darkened-background box (MATH_CHIP_SURFACE) so it
+ *   reads as a self-contained equation while editing.
+ */
+function InlineMathLayer({
+  text,
+  selStart,
+  selEnd,
+  taMap,
+  taId,
+  typoClassName,
+  surfaceClassName,
+}: {
+  text: string
+  selStart: number
+  selEnd: number
+  taMap: React.RefObject<Map<string, HTMLTextAreaElement>>
+  taId: string
+  /** same typography classes as the textarea — keeps KaTeX at the block's size */
+  typoClassName: string
+  surfaceClassName: string
+}) {
+  const mirrorRef = useRef<HTMLDivElement | null>(null)
+  const [chips, setChips] = useState<MathChipRect[]>([])
+
+  const spans = useMemo(() => findInlineMathSpans(text), [text])
+
+  const getTa = useCallback(
+    () => taMap.current?.get(taId) ?? null,
+    [taMap, taId],
+  )
+
+  const measure = useCallback(() => {
+    const ta = getTa()
+    const mirror = mirrorRef.current
+    if (!ta || !mirror) return
+    const visible = spans.filter((sp) => !(selStart < sp.end && selEnd > sp.start))
+    if (!visible.length) {
+      setChips((c) => (c.length ? [] : c))
+      return
+    }
+    // clone the textarea's typography onto the mirror so wrapping matches 1:1
+    const cs = window.getComputedStyle(ta)
+    const s = mirror.style
+    s.fontFamily = cs.fontFamily
+    s.fontSize = cs.fontSize
+    s.fontWeight = cs.fontWeight
+    s.fontStyle = cs.fontStyle
+    s.lineHeight = cs.lineHeight
+    s.letterSpacing = cs.letterSpacing
+    s.wordSpacing = cs.wordSpacing
+    s.tabSize = cs.tabSize
+    s.width = `${ta.clientWidth}px`
+    // rebuild the exact raw flow, wrapping each visible span in a marker
+    mirror.textContent = ''
+    const frag = document.createDocumentFragment()
+    let pos = 0
+    for (const sp of visible) {
+      if (sp.start > pos) frag.append(document.createTextNode(text.slice(pos, sp.start)))
+      const mark = document.createElement('span')
+      mark.textContent = text.slice(sp.start, sp.end)
+      frag.append(mark)
+      pos = sp.end
+    }
+    if (pos < text.length) frag.append(document.createTextNode(text.slice(pos)))
+    mirror.append(frag)
+    const mRect = mirror.getBoundingClientRect()
+    const marks = mirror.querySelectorAll('span')
+    const next: MathChipRect[] = visible.map((sp, i) => {
+      const r = (marks[i] as HTMLElement).getBoundingClientRect()
+      return {
+        x: r.left - mRect.left - ta.scrollLeft,
+        y: r.top - mRect.top - ta.scrollTop,
+        w: r.width,
+        h: r.height,
+        tex: sp.tex,
+      }
+    })
+    setChips((prev) =>
+      prev.length === next.length &&
+      prev.every(
+        (p, i) =>
+          p.tex === next[i].tex &&
+          Math.abs(p.x - next[i].x) < 0.5 &&
+          Math.abs(p.y - next[i].y) < 0.5 &&
+          Math.abs(p.w - next[i].w) < 0.5 &&
+          Math.abs(p.h - next[i].h) < 0.5,
+      )
+        ? prev
+        : next,
+    )
+  }, [getTa, selEnd, selStart, spans, text])
+
+  const measureRef = useRef(measure)
+  useEffect(() => {
+    measureRef.current = measure
+  })
+
+  useLayoutEffect(() => {
+    // DOM measurement → derived chip rects: the canonical useLayoutEffect case
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    measure()
+  }, [measure])
+
+  // re-measure when the textarea resizes (panel resize, font-size pref, fonts)
+  useLayoutEffect(() => {
+    const ta = getTa()
+    if (!ta || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => measureRef.current())
+    ro.observe(ta)
+    return () => ro.disconnect()
+  }, [getTa])
+
+  if (!spans.length) return null
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0">
+      <div
+        ref={mirrorRef}
+        className="invisible absolute left-0 top-0 whitespace-pre-wrap break-words"
+      />
+      {chips.map((c, i) => (
+        <span
+          key={`${i}:${c.tex}`}
+          className={cn(
+            'absolute flex w-max max-w-none items-center justify-center rounded-[5px] px-[3px] ring-1 ring-foreground/[0.07]',
+            typoClassName,
+            surfaceClassName,
+          )}
+          style={{ left: c.x - 3, top: c.y, minWidth: c.w + 6, minHeight: c.h }}
+        >
+          <Latex tex={c.tex} />
+        </span>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 
 /**
  * Notion-style WYSIWYG block editor.
@@ -160,6 +330,8 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     const [flashId, setFlashId] = useState<string | null>(null)
     /** blocks arrange mode — pointer drag & drop, same UX as the sidebar */
     const [arranging, setArranging] = useState(false)
+    /** caret/selection of the active block — drives live inline-math chips */
+    const [activeSel, setActiveSel] = useState<{ start: number; end: number } | null>(null)
 
     const taRefs = useRef(new Map<string, HTMLTextAreaElement>())
     const blocksRef = useRef(blocks)
@@ -348,6 +520,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 
     const handleFocus = (id: string) => {
       cancelBlurDeactivate()
+      setActiveSel(null) // chips show for every span until the caret is known
       setActiveId(id)
     }
 
@@ -657,6 +830,12 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     const handleTextChange = (block: Block, e: { target: HTMLTextAreaElement }) => {
       const value = e.target.value
       setBlockText(block.id, value)
+      if (value.includes('$')) {
+        setActiveSel({
+          start: e.target.selectionStart ?? 0,
+          end: e.target.selectionEnd ?? 0,
+        })
+      }
       autoResize(e.target)
       if (isTextual(block.type)) {
         const caret = e.target.selectionStart ?? value.length
@@ -1139,6 +1318,9 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                   ? "Type '/' for commands — or just write"
                   : 'List item'
 
+      const typoClass = TYPO[block.type] ?? 'text-(length:--note-font-size) leading-7'
+      const hasMath = block.text.includes('$')
+
       const ta = (
         <textarea
           ref={registerTa(block.id)}
@@ -1150,13 +1332,42 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           onKeyDown={(e) => handleTextKeyDown(e, block, idx)}
           onFocus={() => handleFocus(block.id)}
           onBlur={(e) => handleBlurDeactivate(block.id, e.relatedTarget)}
+          onSelect={
+            hasMath
+              ? (e) =>
+                  setActiveSel({
+                    start: e.currentTarget.selectionStart ?? 0,
+                    end: e.currentTarget.selectionEnd ?? 0,
+                  })
+              : undefined
+          }
           className={cn(
-            'w-full resize-none bg-transparent outline-none placeholder:text-muted-foreground/50',
-            TYPO[block.type] ?? 'text-(length:--note-font-size) leading-7',
+            'w-full resize-none break-words bg-transparent outline-none placeholder:text-muted-foreground/50',
+            typoClass,
             block.type === 'todo' && block.checked && 'text-muted-foreground line-through',
           )}
         />
       )
+
+      // live inline math: rendered `$…$` chips float over the raw text while
+      // the caret stays away; touching a span flips it back to source view
+      const taWithMath =
+        hasMath && isTextual(block.type) ? (
+          <div className="relative">
+            {ta}
+            <InlineMathLayer
+              text={block.text}
+              selStart={activeSel ? activeSel.start : -1}
+              selEnd={activeSel ? activeSel.end : -1}
+              taMap={taRefs}
+              taId={block.id}
+              typoClassName={typoClass}
+              surfaceClassName={MATH_CHIP_SURFACE[block.type] ?? MATH_CHIP_SURFACE_DEFAULT}
+            />
+          </div>
+        ) : (
+          ta
+        )
 
       switch (block.type) {
         case 'bullet':
@@ -1166,7 +1377,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                 className="mt-[11px] h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/70"
                 aria-hidden
               />
-              <div className="min-w-0 flex-1">{ta}</div>
+              <div className="min-w-0 flex-1">{taWithMath}</div>
             </div>
           )
         case 'numbered':
@@ -1175,7 +1386,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
               <span className="w-4 shrink-0 text-right text-(length:--note-font-size) leading-7 tabular-nums text-muted-foreground">
                 {numberAt(idx)}.
               </span>
-              <div className="min-w-0 flex-1">{ta}</div>
+              <div className="min-w-0 flex-1">{taWithMath}</div>
             </div>
           )
         case 'todo':
@@ -1187,17 +1398,17 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                 className="mt-1"
                 aria-label={block.checked ? 'Mark as not done' : 'Mark as done'}
               />
-              <div className="min-w-0 flex-1">{ta}</div>
+              <div className="min-w-0 flex-1">{taWithMath}</div>
             </div>
           )
         case 'quote':
           return (
             <div className="rounded-r-md border-l-[3px] border-emerald-600/50 bg-muted/40 py-1 pl-3.5 pr-2">
-              {ta}
+              {taWithMath}
             </div>
           )
         default:
-          return ta
+          return taWithMath
       }
     }
 
@@ -1208,7 +1419,8 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         <InlineMarkdown text={block.text} />
       ) : onlyEmptyParagraph ? (
         <span className="text-muted-foreground/60">
-          Type <span className="font-semibold">/</span> for commands — or just start writing. Try{' '}
+          Type <span className="font-semibold">/</span> for commands — or just start writing. Wrap{' '}
+          <span className="font-semibold">$x^2$</span> for inline math, try{' '}
           <span className="font-semibold">/chem</span> for equations.
         </span>
       ) : (
