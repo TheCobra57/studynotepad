@@ -42,7 +42,11 @@ type ZoomMode = 'fit' | '75' | '100'
 
 interface MeasuredItem {
   el: HTMLElement
+  /** border-box height (margins are handled via flow positions, see `top`) */
   h: number
+  /** border-box top inside the hidden measure container — the real flow
+   * position, with sibling margins already collapsed like they are on paper */
+  top: number
   heading: boolean
 }
 
@@ -110,39 +114,52 @@ export function PrintDialog({ open, onOpenChange }: PrintDialogProps) {
       }
 
       // ---- measure top-level blocks (incl. the optional title block) ----
+      // Flow positions (offsetTop) instead of height + margins: sibling
+      // margins collapse on paper, so summing both sides of every gap
+      // over-estimated each page and left a growing ghost gap at the bottom.
       const items: MeasuredItem[] = []
       for (const child of Array.from(contentEl.children)) {
         if (!(child instanceof HTMLElement)) continue
-        const cs = getComputedStyle(child)
-        const h =
-          child.getBoundingClientRect().height +
-          parseFloat(cs.marginTop || '0') +
-          parseFloat(cs.marginBottom || '0')
-        items.push({ el: child, h, heading: /^H[1-6]$/.test(child.tagName) })
+        items.push({
+          el: child,
+          h: child.getBoundingClientRect().height,
+          top: child.offsetTop,
+          heading: /^H[1-6]$/.test(child.tagName),
+        })
       }
 
       // ---- greedy pagination — mirrors the print CSS break rules ----
+      // Extents run from the first block of each page: CSS truncates a
+      // block's adjoining top margin at a fragmentation break, so every page
+      // starts flush at the top margin (baseTop) — exactly like the printout.
       const groups: MeasuredItem[][] = []
       let cur: MeasuredItem[] = []
-      let used = 0
+      let baseTop = items.length ? items[0].top : 0
       const flush = () => {
         if (cur.length) {
           groups.push(cur)
           cur = []
-          used = 0
         }
       }
       for (let i = 0; i < items.length; i++) {
         const it = items[i]
         const nxt = items[i + 1]
+        // the page's flow extent if this block were added to it
+        const extent = cur.length ? it.top + it.h - baseTop : it.h
         // this block doesn't fit -> close the current page first
-        const overflows = used + it.h > contentH && cur.length > 0
+        const overflows = cur.length > 0 && extent > contentH
         // a heading must not be stranded at the bottom of a page
         const strandedHeading =
-          it.heading && cur.length > 0 && !!nxt && nxt.h <= contentH && used + it.h + nxt.h > contentH
-        if (overflows || strandedHeading) flush()
+          it.heading &&
+          cur.length > 0 &&
+          !!nxt &&
+          nxt.h <= contentH &&
+          nxt.top + nxt.h - baseTop > contentH
+        if (overflows || strandedHeading) {
+          flush()
+          baseTop = it.top
+        }
         cur.push(it)
-        used += it.h
       }
       flush()
       if (!groups.length) groups.push([]) // empty note -> one blank page
@@ -166,11 +183,20 @@ export function PrintDialog({ open, onOpenChange }: PrintDialogProps) {
         const page = document.createElement('div')
         page.className = 'print-sheet-page'
         page.style.padding = `${marginPx}px`
+        // fill the whole sheet: the page element must span the full paper so
+        // the footer sits at the paper's bottom margin instead of floating
+        // right after the last line (which read as "ghost space" below it)
+        page.style.height = `${paperH}px`
+        page.style.boxSizing = 'border-box'
 
         const body = document.createElement('div')
         body.className = 'markdown-body print-content'
         body.style.fontSize = `${settings.textSizePt}pt`
         for (const it of group) body.appendChild(it.el.cloneNode(true))
+        // CSS truncates a block's top margin at a page break — mirror that so
+        // every preview page starts flush, matching the pagination measurement
+        const firstEl = body.firstElementChild
+        if (firstEl instanceof HTMLElement) firstEl.style.marginTop = '0'
         page.appendChild(body)
 
         if (settings.pageNumbers) {
