@@ -316,9 +316,9 @@ html[data-note-size='xl'] {
 }
 
 /* ---------- WYSIWYG block editor ---------- */
-/* see .markdown-body note — font-size applied via utility on the element */
+/* .block-inline inherits font-size/line-height from its block parent (heading
+   sizes vs note size) — do not hardcode typography here */
 .block-inline {
-  @apply leading-7;
   overflow-wrap: break-word;
 }
 .block-inline code {

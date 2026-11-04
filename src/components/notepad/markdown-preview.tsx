@@ -213,10 +213,15 @@ export function MarkdownPreview({
   )
 }
 
-/** Renders a single line of inline markdown (bold, links, `code`, $math$) without block margins */
+/**
+ * Renders a single line of inline markdown (bold, links, `code`, $math$) without
+ * block margins. Typography (font-size / line-height) is INHERITED from the
+ * enclosing block — headings keep their heading size, list items the note size —
+ * so never set a font-size here.
+ */
 export function InlineMarkdown({ text }: { text: string }) {
   return (
-    <span className="block-inline text-(length:--note-font-size)">
+    <span className="block-inline">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[
