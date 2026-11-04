@@ -37,6 +37,7 @@ import {
   autoResize,
   createBlock,
   findInlineMathSpans,
+  findOpenMathSpan,
   isChemBlock,
   isMergeable,
   isTextual,
@@ -152,26 +153,39 @@ const MATH_CHIP_SURFACE: Partial<Record<BlockType, string>> = {
 const MATH_CHIP_SURFACE_DEFAULT =
   'bg-[color-mix(in_srgb,var(--background)_94%,var(--foreground))]'
 
+/**
+ * Raw (unclosed) math box: the same darkened tone as the final chip at ~55%
+ * opacity, so the raw LaTeX and the caret stay visible through it while
+ * typing. Translucent, so it blends with any surface (quotes included).
+ */
+const MATH_CHIP_RAW_SURFACE =
+  'bg-[color-mix(in_srgb,color-mix(in_srgb,var(--background)_94%,var(--foreground))_55%,transparent)]'
+
 interface MathChipRect {
   x: number
   y: number
   w: number
   h: number
   tex: string
+  /** raw box around an unclosed `$…` segment (source stays visible) */
+  raw: boolean
 }
 
 /**
- * Renders `$…$` spans of the text being edited as live KaTeX chips that float
- * exactly over the raw characters (a mirrored text layer measures them).
+ * Renders inline math of the text being edited as boxes that float exactly
+ * over the raw characters (a mirrored text layer measures them):
  *
- * - A span only chips when the caret / selection stays clear of it — the
- *   moment you type the closing `$` the equation renders finalised, while
- *   lone `$` (and the span under the caret) stay raw so editing stays easy.
+ * - Closed `$…$` spans clear of the caret render as live KaTeX chips on an
+ *   opaque darkened box (MATH_CHIP_SURFACE) — typing the closing `$`
+ *   immediately shows the finished equation (live preview).
+ * - An open, unclosed `$…` segment (raw LaTeX being typed) shows as a
+ *   translucent darkened box (MATH_CHIP_RAW_SURFACE) with a dashed outline:
+ *   the raw characters and the caret stay visible through it, making the
+ *   math-in-progress easy to identify. It switches to the rendered chip the
+ *   moment the closing `$` arrives.
  * - Chips ignore pointer events: clicking "the equation" actually clicks the
  *   raw text underneath, dropping the caret inside the span, which flips it
  *   back to source view automatically.
- * - Each chip gets a small darkened-background box (MATH_CHIP_SURFACE) so it
- *   reads as a self-contained equation while editing.
  */
 function InlineMathLayer({
   text,
@@ -196,7 +210,15 @@ function InlineMathLayer({
 
   const spans = useMemo(() => findInlineMathSpans(text), [text])
 
+  // the unterminated `$…` segment the user is currently typing — shown as a
+  // raw box whenever the caret is not clearly before it (typing always keeps
+  // the caret inside it, so the box tracks the math being written)
+  const openSpan = useMemo(() => findOpenMathSpan(text), [text])
+  const openVisible =
+    openSpan !== null && (selStart < 0 || selEnd > openSpan.start)
+
   const getTa = useCallback(
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization -- reading ref.current inside the callback is intentional; the ref identity is stable
     () => taMap.current?.get(taId) ?? null,
     [taMap, taId],
   )
@@ -205,7 +227,10 @@ function InlineMathLayer({
     const ta = getTa()
     const mirror = mirrorRef.current
     if (!ta || !mirror) return
-    const visible = spans.filter((sp) => !(selStart < sp.end && selEnd > sp.start))
+    const visible: Array<{ start: number; end: number; tex: string; raw: boolean }> = spans
+      .filter((sp) => !(selStart < sp.end && selEnd > sp.start))
+      .map((sp) => ({ ...sp, raw: false }))
+    if (openSpan && openVisible) visible.push({ ...openSpan, raw: true })
     if (!visible.length) {
       setChips((c) => (c.length ? [] : c))
       return
@@ -237,14 +262,25 @@ function InlineMathLayer({
     mirror.append(frag)
     const mRect = mirror.getBoundingClientRect()
     const marks = mirror.querySelectorAll('span')
-    const next: MathChipRect[] = visible.map((sp, i) => {
-      const r = (marks[i] as HTMLElement).getBoundingClientRect()
-      return {
-        x: r.left - mRect.left - ta.scrollLeft,
-        y: r.top - mRect.top - ta.scrollTop,
-        w: r.width,
-        h: r.height,
-        tex: sp.tex,
+    // per-line rects: a wrapped span must chip each visual line, not one
+    // big rectangle spanning the gap between them
+    const next: MathChipRect[] = []
+    visible.forEach((sp, i) => {
+      const el = marks[i] as HTMLElement
+      const range = document.createRange()
+      range.selectNodeContents(el)
+      const lineRects = Array.from(range.getClientRects()).filter(
+        (r) => r.width > 0.5 || r.height > 0.5,
+      )
+      for (const r of lineRects.length ? lineRects : [el.getBoundingClientRect()]) {
+        next.push({
+          x: r.left - mRect.left - ta.scrollLeft,
+          y: r.top - mRect.top - ta.scrollTop,
+          w: r.width,
+          h: r.height,
+          tex: sp.tex,
+          raw: sp.raw,
+        })
       }
     })
     setChips((prev) =>
@@ -252,6 +288,7 @@ function InlineMathLayer({
       prev.every(
         (p, i) =>
           p.tex === next[i].tex &&
+          p.raw === next[i].raw &&
           Math.abs(p.x - next[i].x) < 0.5 &&
           Math.abs(p.y - next[i].y) < 0.5 &&
           Math.abs(p.w - next[i].w) < 0.5 &&
@@ -260,7 +297,7 @@ function InlineMathLayer({
         ? prev
         : next,
     )
-  }, [getTa, selEnd, selStart, spans, text])
+  }, [getTa, openSpan, openVisible, selEnd, selStart, spans, text])
 
   const measureRef = useRef(measure)
   useEffect(() => {
@@ -282,26 +319,41 @@ function InlineMathLayer({
     return () => ro.disconnect()
   }, [getTa])
 
-  if (!spans.length) return null
+  // render decision must be synchronous (spans/openVisible) — chips are filled
+  // by measure() inside useLayoutEffect, which needs the mirror to be mounted
+  if (!spans.length && !openVisible) return null
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0">
       <div
         ref={mirrorRef}
         className="invisible absolute left-0 top-0 whitespace-pre-wrap break-words"
       />
-      {chips.map((c, i) => (
-        <span
-          key={`${i}:${c.tex}`}
-          className={cn(
-            'absolute flex w-max max-w-none items-center justify-center rounded-[5px] px-[3px] ring-1 ring-foreground/[0.07]',
-            typoClassName,
-            surfaceClassName,
-          )}
-          style={{ left: c.x - 3, top: c.y, minWidth: c.w + 6, minHeight: c.h }}
-        >
-          <Latex tex={c.tex} />
-        </span>
-      ))}
+      {chips.map((c, i) =>
+        c.raw ? (
+          // math in progress: translucent darkened box + dashed outline, raw
+          // LaTeX and caret stay visible through it
+          <span
+            key={`raw:${i}:${c.tex}`}
+            className={cn(
+              'absolute rounded-[5px] [outline:1px_dashed_color-mix(in_srgb,var(--foreground)_20%,transparent)] [outline-offset:-1px]',
+              MATH_CHIP_RAW_SURFACE,
+            )}
+            style={{ left: c.x - 3, top: c.y, width: c.w + 6, height: c.h }}
+          />
+        ) : (
+          <span
+            key={`${i}:${c.tex}`}
+            className={cn(
+              'absolute flex w-max max-w-none items-center justify-center rounded-[5px] px-[3px] ring-1 ring-foreground/[0.07]',
+              typoClassName,
+              surfaceClassName,
+            )}
+            style={{ left: c.x - 3, top: c.y, minWidth: c.w + 6, minHeight: c.h }}
+          >
+            <Latex tex={c.tex} />
+          </span>
+        ),
+      )}
     </div>
   )
 }

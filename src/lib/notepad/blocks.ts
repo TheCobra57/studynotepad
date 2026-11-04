@@ -120,6 +120,42 @@ export function findInlineMathSpans(text: string): InlineMathSpan[] {
   return spans
 }
 
+/**
+ * Find the open (unclosed) inline-math span: the last `$` that starts a math
+ * segment and has no plausible closing `$` after it — i.e. the user typed an
+ * opening `$` and is still writing the LaTeX.
+ *
+ * Returns the span from that `$` to the end of the text (with `tex` holding
+ * the raw LaTeX typed so far), or null when no unterminated segment exists.
+ * Dollars that merely failed span validation (e.g. "$5 and $10" currency
+ * text, where a rejected closer follows the opener) count as "closed
+ * ambiguously" and produce no decoration at all.
+ */
+export function findOpenMathSpan(text: string): InlineMathSpan | null {
+  if (!text.includes('$')) return null
+  const closed = findInlineMathSpans(text)
+  // last `$` that could open a segment
+  for (let p = text.length - 1; p >= 0; p--) {
+    if (text[p] !== '$') continue
+    if (p > 0 && (text[p - 1] === '\\' || text[p - 1] === '$')) continue
+    if (p + 1 < text.length && text[p + 1] === '$') continue
+    // this dollar already closes a validated span — it is paired, not open
+    if (closed.some((sp) => sp.start === p || sp.end - 1 === p)) continue
+    // open only while nothing after it can close the segment
+    let hasCloser = false
+    for (let q = p + 1; q < text.length; q++) {
+      if (text[q] !== '$') continue
+      if (text[q - 1] === '\\' || text[q - 1] === '$') continue
+      if (q + 1 < text.length && text[q + 1] === '$') continue
+      hasCloser = true
+      break
+    }
+    if (!hasCloser) return { start: p, end: text.length, tex: text.slice(p + 1) }
+    return null // a rejected closer follows — ambiguous dollars, stay raw
+  }
+  return null
+}
+
 // ---------------------------------------------------------------------------
 
 // Bare markers ("2.", "-", "#") are accepted as EMPTY items so that empty
