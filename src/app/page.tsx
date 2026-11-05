@@ -78,7 +78,9 @@ export default function Home() {
     toolbar: {
       hidden: toolbarHidden,
       pinned: toolbarPinned,
+      dismissed: toolbarDismissed,
       togglePinned: toggleToolbarPinned,
+      toggleHidden: toggleToolbarHidden,
       show: showToolbar,
     },
     showAll: showChrome,
@@ -374,7 +376,9 @@ export default function Home() {
             onExitFocus={exitFocus}
             toolbarHidden={toolbarHidden}
             toolbarPinned={toolbarPinned}
+            toolbarDismissed={toolbarDismissed}
             onToggleToolbarPinned={toggleToolbarPinned}
+            onToggleToolbarHidden={toggleToolbarHidden}
             onRevealToolbar={showToolbar}
           />
         </section>

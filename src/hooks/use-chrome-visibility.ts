@@ -46,6 +46,8 @@ function createPrefStore(key: string) {
 
 const headerPinStore = createPrefStore('studypad:header-pinned')
 const toolbarPinStore = createPrefStore('studypad:toolbar-pinned')
+/** explicit "Hide toolbar" choice — overrides every automatic reveal */
+const toolbarHideStore = createPrefStore('studypad:toolbar-hidden')
 
 // ---------------------------------------------------------------------------
 // hook
@@ -59,10 +61,17 @@ const toolbarPinStore = createPrefStore('studypad:toolbar-pinned')
  * Pinned chrome stays permanently visible. Each pin choice is persisted in
  * localStorage — these are device-level view preferences, not note data.
  *
+ * The toolbar additionally has an EXPLICIT "Hide toolbar" choice
+ * (`dismissed`, persisted). While dismissed nothing reveals the toolbar —
+ * not scrolling up, not focusing the editor, not switching notes, not focus
+ * modes — until the user presses "Show toolbar" (or pins it) again. Only
+ * passive/automatic reveals honour the dismissal; explicit user actions in
+ * the top bar always win.
+ *
  * `suppressed` (focus modes) pauses tracking and resets everything to visible
- * so it is back when the focus mode ends. `revealKey` (the selected note id)
- * reveals everything when it changes — opening a note always starts with the
- * toolbars in place.
+ * so it is back when the focus mode ends (an explicitly hidden toolbar stays
+ * hidden). `revealKey` (the selected note id) reveals everything when it
+ * changes — opening a note always starts with the toolbars in place.
  */
 export function useChromeVisibility(
   mainRef: RefObject<HTMLElement | null>,
@@ -79,6 +88,11 @@ export function useChromeVisibility(
   const toolbarPinned = useSyncExternalStore(
     toolbarPinStore.subscribe,
     toolbarPinStore.read,
+    () => false,
+  )
+  const toolbarDismissed = useSyncExternalStore(
+    toolbarHideStore.subscribe,
+    toolbarHideStore.read,
     () => false,
   )
 
@@ -100,15 +114,24 @@ export function useChromeVisibility(
     setWasSuppressed(suppressed)
     if (suppressed) {
       setHeaderHidden(false)
-      setToolbarHidden(false)
+      // an explicitly hidden toolbar stays hidden — "no matter what"
+      if (!toolbarDismissed) setToolbarHidden(false)
       graceUntil.current = performance.now() + 300
     }
   }
   if (revealKey !== wasRevealKey) {
     setWasRevealKey(revealKey)
     setHeaderHidden(false)
-    setToolbarHidden(false)
+    // switching notes reveals the toolbar unless it was explicitly hidden
+    if (!toolbarDismissed) setToolbarHidden(false)
     graceUntil.current = performance.now() + 300
+  }
+  // a dismissal that arrives from the persisted pref (page load, another tab)
+  // must hide the toolbar immediately, not just future reveals
+  const [wasDismissed, setWasDismissed] = useState(toolbarDismissed)
+  if (toolbarDismissed !== wasDismissed) {
+    setWasDismissed(toolbarDismissed)
+    if (toolbarDismissed) setToolbarHidden(true)
   }
 
   // per-container baselines so the first event after (re)subscribing
@@ -141,18 +164,19 @@ export function useChromeVisibility(
         // taller, which shrinks every pane's scroll range. Reacting to those
         // clamped events bounced the header at the end of a page instead of
         // staying hidden; genuine upward scrolls move away from the bottom
-        // edge, so they still reveal everything instantly.
+        // edge, so they still reveal everything instantly. An explicitly
+        // hidden toolbar ignores these automatic reveals.
         const fromBottom = t.scrollHeight - t.clientHeight - top
         if (fromBottom > 1) {
           setHeaderHidden(false)
-          setToolbarHidden(false)
+          if (!toolbarDismissed) setToolbarHidden(false)
           graceUntil.current = performance.now() + 300
         }
       }
     }
     document.addEventListener('scroll', onScroll, { capture: true, passive: true })
     return () => document.removeEventListener('scroll', onScroll, { capture: true })
-  }, [suppressed, headerPinned, toolbarPinned, mainRef])
+  }, [suppressed, headerPinned, toolbarPinned, toolbarDismissed, mainRef])
 
   const toggleHeaderPinned = useCallback(() => {
     headerPinStore.write(!headerPinStore.read())
@@ -161,20 +185,38 @@ export function useChromeVisibility(
   }, [])
 
   const toggleToolbarPinned = useCallback(() => {
-    toolbarPinStore.write(!toolbarPinStore.read())
-    setToolbarHidden(false) // a freshly pinned toolbar must be visible
+    const next = !toolbarPinStore.read()
+    toolbarPinStore.write(next)
+    // pinning is an explicit request for an always-visible toolbar — it also
+    // lifts an explicit hide; unpinning never pops the toolbar open
+    if (next) toolbarHideStore.write(false)
+    if (!toolbarHideStore.read()) setToolbarHidden(false)
     graceUntil.current = performance.now() + 300
   }, [])
 
-  /** reveal just the toolbar — used when the user focuses the editor */
+  /** the explicit "Hide toolbar" top-bar option — sticks until reversed */
+  const toggleToolbarHidden = useCallback(() => {
+    const dismiss = !toolbarHideStore.read()
+    toolbarHideStore.write(dismiss)
+    if (dismiss) {
+      setToolbarHidden(true)
+    } else {
+      setToolbarHidden(false)
+      graceUntil.current = performance.now() + 300
+    }
+  }, [])
+
+  /** reveal just the toolbar — used when the user focuses the editor.
+   *  Automatic: never overrides an explicit "Hide toolbar". */
   const showToolbar = useCallback(() => {
+    if (toolbarHideStore.read()) return
     setToolbarHidden(false)
     graceUntil.current = performance.now() + 300
   }, [])
 
   const showAll = useCallback(() => {
     setHeaderHidden(false)
-    setToolbarHidden(false)
+    if (!toolbarHideStore.read()) setToolbarHidden(false)
     graceUntil.current = performance.now() + 300
   }, [])
 
@@ -183,7 +225,9 @@ export function useChromeVisibility(
     toolbar: {
       hidden: toolbarHidden,
       pinned: toolbarPinned,
+      dismissed: toolbarDismissed,
       togglePinned: toggleToolbarPinned,
+      toggleHidden: toggleToolbarHidden,
       show: showToolbar,
     },
     showAll,

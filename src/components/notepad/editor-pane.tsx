@@ -28,6 +28,8 @@ import {
   Minus,
   MoreHorizontal,
   PanelLeft,
+  PanelTopClose,
+  PanelTopOpen,
   Pin,
   PinOff,
   Printer,
@@ -80,7 +82,10 @@ interface EditorPaneProps {
   /** editor toolbar auto-hide state — shared chrome behaviour with the app header */
   toolbarHidden?: boolean
   toolbarPinned?: boolean
+  /** explicit "Hide toolbar" choice — overrides every automatic reveal */
+  toolbarDismissed?: boolean
   onToggleToolbarPinned?: () => void
+  onToggleToolbarHidden?: () => void
   /** called when anything inside the pane gains focus — brings the toolbar back */
   onRevealToolbar?: () => void
 }
@@ -95,7 +100,9 @@ export function EditorPane({
   onExitFocus,
   toolbarHidden = false,
   toolbarPinned = true,
+  toolbarDismissed = false,
   onToggleToolbarPinned,
+  onToggleToolbarHidden,
   onRevealToolbar,
 }: EditorPaneProps) {
   const note = useSelectedNote()
@@ -428,6 +435,34 @@ export function EditorPane({
               onClick={onToggleToolbarPinned}
             >
               {toolbarPinned ? <Pin className="h-4 w-4" /> : <PinOff className="h-4 w-4" />}
+            </Button>
+          )}
+
+          {/* Explicit hide — the toolbar stays hidden no matter what (scrolling
+              up, focusing the editor, switching notes, focus modes) until it
+              is explicitly shown again from this same button */}
+          {onToggleToolbarHidden && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              aria-label={
+                toolbarDismissed
+                  ? 'Show toolbar — bring the formatting toolbar back'
+                  : 'Hide toolbar — stays hidden until you show it again'
+              }
+              title={
+                toolbarDismissed
+                  ? 'Show toolbar (bring the formatting toolbar back)'
+                  : 'Hide toolbar (stays hidden until you show it again)'
+              }
+              onClick={onToggleToolbarHidden}
+            >
+              {toolbarDismissed ? (
+                <PanelTopOpen className="h-4 w-4" />
+              ) : (
+                <PanelTopClose className="h-4 w-4" />
+              )}
             </Button>
           )}
 
