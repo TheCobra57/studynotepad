@@ -287,11 +287,12 @@ export const useNotepadStore = create<NotepadStore>()(
           const next = [...deck]
           const [moved] = next.splice(idx, 1)
           next.splice(to, 0, moved)
-          const byId = new Map(next.map((f) => [f.id, f] as const))
-          let k = 0
+          // lay the reordered deck back into the slots this chapter's cards
+          // occupy (other chapters' cards keep their exact positions)
+          const queue = [...next]
           return {
             flashcards: s.flashcards.map((f) =>
-              f.chapterId === chapterId ? (byId.get(f.id) as Flashcard) : f,
+              f.chapterId === chapterId ? (queue.shift() as Flashcard) : f,
             ),
           }
         }),
