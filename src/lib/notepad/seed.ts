@@ -1,4 +1,4 @@
-import type { Chapter, Flashcard, Note, Subject } from './types'
+import type { Chapter, Flashcard, Note, Quiz, QuizQuestion, Subject } from './types'
 
 const now = Date.now()
 const day = 86_400_000
@@ -337,4 +337,86 @@ Differentiate the **outside** function first (leaving the inside alone), then mu
 ==Don't forget== the constant of integration $C$ — and the special case $\\int x^{-1} dx = \\ln|x| + C$.`,
     9,
   ),
+]
+
+// ---------------------------------------------------------------------------
+// Seed quiz — one demo quiz (all four question types) so the Quiz tab is
+// never a dead end on first run. Returning users start with no quizzes
+// (the persist migration resets this list), same as the flashcard deck.
+// ---------------------------------------------------------------------------
+
+function q(
+  id: string,
+  type: QuizQuestion['type'],
+  prompt: string,
+  extra: Partial<QuizQuestion>,
+): QuizQuestion {
+  return {
+    id,
+    type,
+    prompt: prompt.trim(),
+    options: [],
+    correctOption: 0,
+    acceptedAnswers: [],
+    keywords: [],
+    ...extra,
+  }
+}
+
+const seedQuizQuestions: QuizQuestion[] = [
+  q(
+    'quizq-1',
+    'mcq',
+    `What must always be equal on both sides of a ==balanced== chemical equation?`,
+    {
+      options: [
+        'The number of atoms of each element',
+        'The number of molecules',
+        'The number of electrons',
+        'The total number of reactions',
+      ],
+      correctOption: 0,
+    },
+  ),
+  q(
+    'quizq-2',
+    'fill-blank',
+    `Complete the equation — in the Haber process, nitrogen reacts with hydrogen to produce ____ (name or formula).
+
+$$\\ce{N2 + 3H2 -> 2NH3}$$`,
+    {
+      acceptedAnswers: ['ammonia', 'NH3'],
+    },
+  ),
+  q(
+    'quizq-3',
+    'name-item',
+    `Zinc reacts with dilute hydrochloric acid:
+
+$$\\ce{Zn + 2HCl -> ZnCl2 + H2 ^}$$
+
+Name the gas given off (the ____ in the equation).`,
+    {
+      acceptedAnswers: ['hydrogen', 'H2'],
+    },
+  ),
+  q(
+    'quizq-4',
+    'answer',
+    `Explain why increasing the temperature increases the rate of a reaction.`,
+    {
+      keywords: ['collision', 'energy', 'frequent'],
+    },
+  ),
+]
+
+export const seedQuizzes: Quiz[] = [
+  {
+    id: 'quiz-chem-1',
+    chapterId: 'ch-chem-1',
+    title: 'Chemical reactions — quick check',
+    questions: seedQuizQuestions,
+    createdAt: now - 8 * day,
+    updatedAt: now - 8 * day / 2,
+  },
 ]

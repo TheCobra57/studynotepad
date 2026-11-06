@@ -43,6 +43,7 @@ import { Sidebar } from '@/components/notepad/sidebar'
 import { NotesPane } from '@/components/notepad/notes-pane'
 import { EditorPane } from '@/components/notepad/editor-pane'
 import { FlashcardsPane } from '@/components/notepad/flashcards/flashcards-pane'
+import { QuizPane } from '@/components/notepad/quiz/quiz-pane'
 import { CheatSheet } from '@/components/notepad/cheat-sheet'
 import { WelcomeDialog, type WelcomeChoice } from '@/components/notepad/welcome-dialog'
 import { ThemeToggle } from '@/components/notepad/theme-toggle'
@@ -159,6 +160,7 @@ export default function Home() {
   const chapters = useNotepadStore((s) => s.chapters)
   const notes = useNotepadStore((s) => s.notes)
   const flashcards = useNotepadStore((s) => s.flashcards)
+  const quizzes = useNotepadStore((s) => s.quizzes)
   const chapterTab = useNotepadStore((s) => s.chapterTab)
   const { importData, clearAll } = useNotepadStore()
   const { toast } = useToast()
@@ -170,6 +172,7 @@ export default function Home() {
       chapters: state.chapters,
       notes: state.notes,
       flashcards: state.flashcards,
+      quizzes: state.quizzes,
       exportedAt: new Date().toISOString(),
       version: 1,
     }
@@ -182,7 +185,7 @@ export default function Home() {
     URL.revokeObjectURL(url)
     toast({
       title: 'Backup downloaded',
-      description: `${state.notes.length} notes and ${state.flashcards.length} flashcards exported as JSON.`,
+      description: `${state.notes.length} notes, ${state.flashcards.length} flashcards and ${state.quizzes.length} quizzes exported as JSON.`,
     })
   }
 
@@ -201,14 +204,16 @@ export default function Home() {
         notes: data.notes,
         // backups from V2 and older have no flashcards — the deck starts empty
         ...(Array.isArray(data.flashcards) ? { flashcards: data.flashcards } : {}),
+        // backups from V3 and older have no quizzes
+        ...(Array.isArray(data.quizzes) ? { quizzes: data.quizzes } : {}),
         exportedAt: data.exportedAt ?? new Date().toISOString(),
         version: 1,
       })
       toast({
         title: 'Backup restored',
-        description: `${data.notes.length} notes and ${
+        description: `${data.notes.length} notes, ${
           Array.isArray(data.flashcards) ? data.flashcards.length : 0
-        } flashcards imported successfully.`,
+        } flashcards and ${Array.isArray(data.quizzes) ? data.quizzes.length : 0} quizzes imported successfully.`,
       })
     } catch {
       toast({
@@ -372,10 +377,24 @@ export default function Home() {
               ? 'block'
               : cn('lg:block', mobileView === 'editor' ? 'block' : 'hidden'),
           )}
-          aria-label={chapterTab === 'flashcards' ? 'Flashcards workspace' : 'Note editor'}
+          aria-label={
+            chapterTab === 'flashcards'
+              ? 'Flashcards workspace'
+              : chapterTab === 'quiz'
+                ? 'Quiz workspace'
+                : 'Note editor'
+          }
         >
           {chapterTab === 'flashcards' ? (
             <FlashcardsPane
+              onBack={() => setMobileView('notes')}
+              onOpenSidebar={() => setMobileView('tree')}
+              focusMode={focusMode}
+              onEnterFocus={enterFocus}
+              onExitFocus={exitFocus}
+            />
+          ) : chapterTab === 'quiz' ? (
+            <QuizPane
               onBack={() => setMobileView('notes')}
               onOpenSidebar={() => setMobileView('tree')}
               focusMode={focusMode}
@@ -407,7 +426,7 @@ export default function Home() {
       <footer className="mt-auto flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-0.5 border-t px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-[11px] text-muted-foreground">
         <span className="tabular-nums">
           {subjects.length} subjects · {chapters.length} chapters · {notes.length} notes ·{' '}
-          {flashcards.length} flashcards — stored in your browser
+          {flashcards.length} flashcards · {quizzes.length} quizzes — stored in your browser
         </span>
         <span className="hidden md:inline">
           {'$…$'} math · {'\\ce{}'} chemistry · ==labels== · type / to insert · Ctrl+P print

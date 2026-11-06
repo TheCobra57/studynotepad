@@ -44,6 +44,8 @@ export interface NotepadBackup {
   notes: Note[]
   /** absent in V2 backups and older — treated as an empty deck on import */
   flashcards?: Flashcard[]
+  /** absent in V3 backups and older — treated as no quizzes on import */
+  quizzes?: Quiz[]
   exportedAt: string
   version: 1
 }
@@ -54,8 +56,42 @@ export type MobileView = 'tree' | 'notes' | 'editor'
  *  'fullscreen' additionally requests native browser fullscreen. */
 export type EditorFocusMode = 'off' | 'area' | 'fullscreen'
 
-/** Workspace tabs inside a chapter — notes or the chapter's flashcard deck */
-export type ChapterTab = 'notes' | 'flashcards'
+/** Workspace tabs inside a chapter — notes, the flashcard deck, or quizzes */
+export type ChapterTab = 'notes' | 'flashcards' | 'quiz'
 
 /** Flashcards workspace mode — build the deck or study it */
 export type FlashcardMode = 'make' | 'view'
+
+/** Quiz workspace mode — build the questions or attempt the quiz */
+export type QuizMode = 'create' | 'attempt'
+
+/** The four quiz question types */
+export type QuizQuestionType = 'mcq' | 'fill-blank' | 'name-item' | 'answer'
+
+/** One quiz question. Every field is always present — the editor and the
+ *  attempt view only touch the ones their question type needs, so switching
+ *  a question's type never destroys what was typed before. */
+export interface QuizQuestion {
+  id: string
+  type: QuizQuestionType
+  /** the question itself — markdown, same format as notes and card faces */
+  prompt: string
+  /** mcq: the choices (four or more) */
+  options: string[]
+  /** mcq: index into options of the correct choice */
+  correctOption: number
+  /** fill-blank & name-item: accepted answers (case & punctuation-insensitive) */
+  acceptedAnswers: string[]
+  /** answer-following: keywords looked for in the answer — all found = correct */
+  keywords: string[]
+}
+
+export interface Quiz {
+  id: string
+  chapterId: string
+  title: string
+  /** the questions, in quiz order (array order, like a flashcard deck) */
+  questions: QuizQuestion[]
+  createdAt: number
+  updatedAt: number
+}

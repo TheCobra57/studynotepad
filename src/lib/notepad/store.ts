@@ -4,7 +4,7 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { browserStorage } from './idb-storage'
 import { STORAGE_KEY } from './constants'
-import { seedChapters, seedFlashcards, seedNotes, seedSubjects } from './seed'
+import { seedChapters, seedFlashcards, seedNotes, seedQuizzes, seedSubjects } from './seed'
 import type {
   Chapter,
   ChapterTab,
@@ -12,6 +12,10 @@ import type {
   FlashcardMode,
   NotepadBackup,
   Note,
+  Quiz,
+  QuizMode,
+  QuizQuestion,
+  QuizQuestionType,
   Subject,
 } from './types'
 
@@ -43,14 +47,18 @@ interface SelectionInput {
   chapters: Chapter[]
   notes: Note[]
   flashcards: Flashcard[]
+  quizzes: Quiz[]
   selectedChapterId: string | null
   selectedNoteId: string | null
   /** which flashcard the workspace has open — session-ish, not persisted */
   selectedCardId: string | null
+  /** which quiz & question the workspace has open — session-ish, not persisted */
+  selectedQuizId: string | null
+  selectedQuestionId: string | null
 }
 
 function normalizeSelection(state: SelectionInput) {
-  const { chapters, notes, flashcards, selectedChapterId, selectedNoteId } = state
+  const { chapters, notes, flashcards, quizzes, selectedChapterId, selectedNoteId } = state
   let chapterId: string | null = selectedChapterId
   if (!chapterId || !chapters.some((c) => c.id === chapterId)) {
     chapterId = chapters.length ? chapters[0].id : null
@@ -66,7 +74,24 @@ function normalizeSelection(state: SelectionInput) {
   if (!cardId || !deck.some((f) => f.id === cardId)) {
     cardId = deck.length ? deck[0].id : null
   }
-  return { selectedChapterId: chapterId, selectedNoteId: noteId, selectedCardId: cardId }
+  // the open quiz follows the chapter, and the open question follows the quiz
+  const chapterQuizzes = chapterId ? quizzes.filter((q) => q.chapterId === chapterId) : []
+  let quizId: string | null = state.selectedQuizId
+  if (!quizId || !chapterQuizzes.some((q) => q.id === quizId)) {
+    quizId = chapterQuizzes.length ? chapterQuizzes[0].id : null
+  }
+  const quizQuestions = chapterQuizzes.find((q) => q.id === quizId)?.questions ?? []
+  let questionId: string | null = state.selectedQuestionId
+  if (!questionId || !quizQuestions.some((q) => q.id === questionId)) {
+    questionId = quizQuestions.length ? quizQuestions[0].id : null
+  }
+  return {
+    selectedChapterId: chapterId,
+    selectedNoteId: noteId,
+    selectedCardId: cardId,
+    selectedQuizId: quizId,
+    selectedQuestionId: questionId,
+  }
 }
 
 export interface NotepadStore extends SelectionInput {
@@ -83,6 +108,10 @@ export interface NotepadStore extends SelectionInput {
   /** flashcards workspace mode — session-only, not persisted */
   flashcardMode: FlashcardMode
   setFlashcardMode: (mode: FlashcardMode) => void
+
+  /** quiz workspace mode — session-only, not persisted */
+  quizMode: QuizMode
+  setQuizMode: (mode: QuizMode) => void
 
   addSubject: (name: string, color: string) => Subject
   renameSubject: (id: string, name: string, color?: string) => void
@@ -105,6 +134,18 @@ export interface NotepadStore extends SelectionInput {
   moveCard: (chapterId: string, id: string, direction: -1 | 1) => void
   selectCard: (id: string) => void
 
+  /** quizzes — a chapter holds any number of quizzes, store array order */
+  addQuiz: (chapterId: string, title?: string) => Quiz
+  updateQuiz: (id: string, patch: Partial<Pick<Quiz, 'title'>>) => void
+  deleteQuiz: (id: string) => void
+  duplicateQuiz: (id: string) => Quiz | undefined
+  selectQuiz: (id: string) => void
+  addQuestion: (quizId: string, type?: QuizQuestionType) => QuizQuestion | undefined
+  updateQuestion: (questionId: string, patch: Partial<Omit<QuizQuestion, 'id'>>) => void
+  deleteQuestion: (questionId: string) => void
+  moveQuestion: (quizId: string, questionId: string, direction: -1 | 1) => void
+  selectQuestion: (id: string) => void
+
   selectChapter: (chapterId: string) => void
   selectNote: (id: string) => void
   setSearchQuery: (q: string) => void
@@ -124,12 +165,15 @@ const seedState = {
   chapters: seedChapters,
   notes: seedNotes,
   flashcards: seedFlashcards,
+  quizzes: seedQuizzes,
 }
 const seedSelection = normalizeSelection({
   ...seedState,
   selectedChapterId: seedChapters[0].id,
   selectedNoteId: seedNotes[0].id,
   selectedCardId: seedFlashcards[0]?.id ?? null,
+  selectedQuizId: seedQuizzes[0]?.id ?? null,
+  selectedQuestionId: seedQuizzes[0]?.questions[0]?.id ?? null,
 })
 
 export const useNotepadStore = create<NotepadStore>()(
@@ -146,6 +190,9 @@ export const useNotepadStore = create<NotepadStore>()(
 
       flashcardMode: 'make',
       setFlashcardMode: (mode) => set({ flashcardMode: mode }),
+
+      quizMode: 'create',
+      setQuizMode: (mode) => set({ quizMode: mode }),
 
       addSubject: (name, color) => {
         const subject: Subject = { id: uid(), name: name.trim(), color, createdAt: Date.now() }
@@ -169,12 +216,14 @@ export const useNotepadStore = create<NotepadStore>()(
           const chapters = s.chapters.filter((c) => c.subjectId !== id)
           const notes = s.notes.filter((n) => !chapterIds.has(n.chapterId))
           const flashcards = s.flashcards.filter((f) => !chapterIds.has(f.chapterId))
+          const quizzes = s.quizzes.filter((q) => !chapterIds.has(q.chapterId))
           return {
             subjects,
             chapters,
             notes,
             flashcards,
-            ...normalizeSelection({ ...s, subjects, chapters, notes, flashcards }),
+            quizzes,
+            ...normalizeSelection({ ...s, subjects, chapters, notes, flashcards, quizzes }),
           }
         }),
 
@@ -198,16 +247,19 @@ export const useNotepadStore = create<NotepadStore>()(
           const chapters = s.chapters.filter((c) => c.id !== id)
           const notes = s.notes.filter((n) => n.chapterId !== id)
           const flashcards = s.flashcards.filter((f) => f.chapterId !== id)
+          const quizzes = s.quizzes.filter((q) => q.chapterId !== id)
           return {
             chapters,
             notes,
             flashcards,
+            quizzes,
             ...normalizeSelection({
               ...s,
               subjects: s.subjects,
               chapters,
               notes,
               flashcards,
+              quizzes,
               selectedChapterId: s.selectedChapterId,
               selectedNoteId: s.selectedNoteId,
             }),
@@ -304,6 +356,172 @@ export const useNotepadStore = create<NotepadStore>()(
           return { selectedCardId: id, selectedChapterId: card.chapterId }
         }),
 
+      // ---------- quizzes ----------
+
+      addQuiz: (chapterId, title) => {
+        let created: Quiz | undefined
+        set((s) => {
+          const inChapter = s.quizzes.filter((q) => q.chapterId === chapterId).length
+          const quiz: Quiz = {
+            id: uid(),
+            chapterId,
+            title: title?.trim() || `Quiz ${inChapter + 1}`,
+            questions: [],
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          }
+          created = quiz
+          return {
+            quizzes: [...s.quizzes, quiz],
+            selectedQuizId: quiz.id,
+            selectedQuestionId: null,
+          }
+        })
+        return created as Quiz
+      },
+
+      updateQuiz: (id, patch) =>
+        set((s) => ({
+          quizzes: s.quizzes.map((q) =>
+            q.id === id ? { ...q, ...patch, updatedAt: Date.now() } : q,
+          ),
+        })),
+
+      deleteQuiz: (id) =>
+        set((s) => {
+          const quizzes = s.quizzes.filter((q) => q.id !== id)
+          if (s.selectedQuizId === id) {
+            const remaining = quizzes.filter((q) => q.chapterId === s.selectedChapterId)
+            return {
+              quizzes,
+              selectedQuizId: remaining.length ? remaining[0].id : null,
+              selectedQuestionId: remaining[0]?.questions[0]?.id ?? null,
+            }
+          }
+          return { quizzes }
+        }),
+
+      duplicateQuiz: (id) => {
+        let created: Quiz | undefined
+        set((s) => {
+          const src = s.quizzes.find((q) => q.id === id)
+          if (!src) return s
+          const copy: Quiz = {
+            ...src,
+            id: uid(),
+            title: `${src.title} (copy)`,
+            questions: src.questions.map((question) => ({ ...question, id: uid() })),
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          }
+          created = copy
+          const idx = s.quizzes.findIndex((q) => q.id === id)
+          const quizzes = [...s.quizzes]
+          quizzes.splice(idx + 1, 0, copy)
+          return { quizzes, selectedQuizId: copy.id, selectedQuestionId: copy.questions[0]?.id ?? null }
+        })
+        return created
+      },
+
+      selectQuiz: (id) =>
+        set((s) => {
+          const quiz = s.quizzes.find((q) => q.id === id)
+          if (!quiz) return s
+          return {
+            selectedQuizId: id,
+            selectedChapterId: quiz.chapterId,
+            selectedQuestionId: quiz.questions[0]?.id ?? null,
+          }
+        }),
+
+      addQuestion: (quizId, type = 'mcq') => {
+        let created: QuizQuestion | undefined
+        set((s) => {
+          const quiz = s.quizzes.find((q) => q.id === quizId)
+          if (!quiz) return s
+          const question: QuizQuestion = {
+            id: uid(),
+            type,
+            prompt: '',
+            options: type === 'mcq' ? ['', '', '', ''] : [],
+            correctOption: 0,
+            acceptedAnswers: type === 'fill-blank' || type === 'name-item' ? [''] : [],
+            keywords: [],
+          }
+          created = question
+          return {
+            quizzes: s.quizzes.map((q) =>
+              q.id === quizId
+                ? { ...q, questions: [...q.questions, question], updatedAt: Date.now() }
+                : q,
+            ),
+            selectedQuizId: quizId,
+            selectedQuestionId: question.id,
+          }
+        })
+        return created as QuizQuestion
+      },
+
+      updateQuestion: (questionId, patch) =>
+        set((s) => ({
+          quizzes: s.quizzes.map((quiz) => {
+            if (!quiz.questions.some((q) => q.id === questionId)) return quiz
+            return {
+              ...quiz,
+              updatedAt: Date.now(),
+              questions: quiz.questions.map((q) =>
+                q.id === questionId ? { ...q, ...patch } : q,
+              ),
+            }
+          }),
+        })),
+
+      deleteQuestion: (questionId) =>
+        set((s) => {
+          const owner = s.quizzes.find((q) => q.questions.some((x) => x.id === questionId))
+          if (!owner) return s
+          const idx = owner.questions.findIndex((x) => x.id === questionId)
+          const questions = owner.questions.filter((x) => x.id !== questionId)
+          const quizzes = s.quizzes.map((q) =>
+            q.id === owner.id ? { ...q, questions, updatedAt: Date.now() } : q,
+          )
+          // if the open question was deleted, open its neighbour (or none)
+          const selectedQuestionId =
+            s.selectedQuestionId === questionId
+              ? (questions[Math.min(idx, questions.length - 1)]?.id ?? null)
+              : s.selectedQuestionId
+          return { quizzes, selectedQuestionId }
+        }),
+
+      moveQuestion: (quizId, questionId, direction) =>
+        set((s) => {
+          const quiz = s.quizzes.find((q) => q.id === quizId)
+          if (!quiz) return s
+          const idx = quiz.questions.findIndex((x) => x.id === questionId)
+          const to = idx + direction
+          if (idx === -1 || to < 0 || to >= quiz.questions.length) return s
+          const next = [...quiz.questions]
+          const [moved] = next.splice(idx, 1)
+          next.splice(to, 0, moved)
+          // write the new order straight back into this quiz's question list
+          return {
+            quizzes: s.quizzes.map((q) =>
+              q.id === quizId ? { ...q, questions: next, updatedAt: Date.now() } : q,
+            ),
+          }
+        }),
+
+      selectQuestion: (id) =>
+        set((s) => {
+          const quiz = s.quizzes.find((q) => q.questions.some((x) => x.id === id))
+          if (!quiz) return s
+          return {
+            selectedQuestionId: id,
+            selectedQuizId: quiz.id,
+            selectedChapterId: quiz.chapterId,
+          }
+        }),
+
       addNote: (chapterId, title = 'Untitled note') => {
         let created: Note | undefined
         set((s) => {
@@ -361,10 +579,13 @@ export const useNotepadStore = create<NotepadStore>()(
           if (s.selectedChapterId === chapterId) return s
           const chapterNotes = sortNotes(s.notes.filter((n) => n.chapterId === chapterId))
           const deck = s.flashcards.filter((f) => f.chapterId === chapterId)
+          const chapterQuizzes = s.quizzes.filter((q) => q.chapterId === chapterId)
           return {
             selectedChapterId: chapterId,
             selectedNoteId: chapterNotes.length ? chapterNotes[0].id : null,
             selectedCardId: deck.length ? deck[0].id : null,
+            selectedQuizId: chapterQuizzes.length ? chapterQuizzes[0].id : null,
+            selectedQuestionId: chapterQuizzes[0]?.questions[0]?.id ?? null,
           }
         }),
 
@@ -439,13 +660,22 @@ export const useNotepadStore = create<NotepadStore>()(
           const chapters = backup.chapters ?? []
           const notes = backup.notes ?? []
           const flashcards = backup.flashcards ?? []
+          const quizzes = backup.quizzes ?? []
           return {
             subjects,
             chapters,
             notes,
             flashcards,
+            quizzes,
             searchQuery: '',
-            ...normalizeSelection({ ...s, subjects, chapters, notes, flashcards }),
+            ...normalizeSelection({
+              ...s,
+              subjects,
+              chapters,
+              notes,
+              flashcards,
+              quizzes,
+            }),
           }
         }),
 
@@ -455,19 +685,27 @@ export const useNotepadStore = create<NotepadStore>()(
           chapters: [],
           notes: [],
           flashcards: [],
+          quizzes: [],
           selectedChapterId: null,
           selectedNoteId: null,
           selectedCardId: null,
+          selectedQuizId: null,
+          selectedQuestionId: null,
           searchQuery: '',
         }),
     }),
     {
       name: STORAGE_KEY,
-      version: 2,
+      version: 3,
       storage: createJSONStorage(browserStorage),
       // V1 → V2: flashcards didn't exist yet — start every returning user
-      // with an empty deck (fresh installs get the seeded demo deck instead)
-      migrate: (persisted) => ({ ...(persisted as object), flashcards: [] }),
+      // with an empty deck. V2 → V3: quizzes didn't exist yet — same treatment
+      // (fresh installs get the seeded demo deck/quiz instead).
+      migrate: (persisted) => ({
+        ...(persisted as object),
+        flashcards: (persisted as { flashcards?: unknown }).flashcards ?? [],
+        quizzes: [],
+      }),
       // flips hasHydrated once the (async) IndexedDB read finishes; during
       // SSR the no-op storage resolves immediately with no data, which is
       // fine — the UI splash gate covers it
@@ -480,6 +718,7 @@ export const useNotepadStore = create<NotepadStore>()(
         chapters: s.chapters,
         notes: s.notes,
         flashcards: s.flashcards,
+        quizzes: s.quizzes,
         selectedChapterId: s.selectedChapterId,
         selectedNoteId: s.selectedNoteId,
       }),
@@ -501,3 +740,7 @@ export const useSelectedCard = () =>
 /** a chapter's deck, in deck order (the store array order) */
 export const chapterDeck = (flashcards: Flashcard[], chapterId: string | null): Flashcard[] =>
   chapterId ? flashcards.filter((f) => f.chapterId === chapterId) : []
+
+/** a chapter's quizzes, in store array order */
+export const chapterQuizList = (quizzes: Quiz[], chapterId: string | null): Quiz[] =>
+  chapterId ? quizzes.filter((q) => q.chapterId === chapterId) : []

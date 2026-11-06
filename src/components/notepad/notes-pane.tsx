@@ -7,7 +7,9 @@ import {
   ArrowUp,
   Check,
   ChevronLeft,
+  ClipboardList,
   Code2,
+  Copy,
   FileUp,
   FlaskConical,
   GripVertical,
@@ -23,6 +25,7 @@ import {
   Plus,
   Radical,
   Search,
+  SquarePen,
   StickyNote,
   Table as TableIcon,
   Trash2,
@@ -55,9 +58,10 @@ import {
   type ExcerptElement,
   type ExcerptSegment,
 } from '@/lib/notepad/constants'
-import { chapterDeck, sortNotes, useNotepadStore } from '@/lib/notepad/store'
+import { chapterDeck, chapterQuizList, sortNotes, useNotepadStore } from '@/lib/notepad/store'
 import { useArrange } from '@/hooks/use-arrange'
-import type { Flashcard, Note } from '@/lib/notepad/types'
+import type { Flashcard, Note, Quiz } from '@/lib/notepad/types'
+import { NameDialog } from './name-dialog'
 
 /** Same icon language as the / menu — a chip is recognisable at a glance */
 const EXCERPT_ICONS: Record<ExcerptElement, LucideIcon> = {
@@ -152,17 +156,24 @@ export function NotesPane({ onBack, onOpenNote, onImportMd }: NotesPaneProps) {
   const subjects = useNotepadStore((s) => s.subjects)
   const notes = useNotepadStore((s) => s.notes)
   const flashcards = useNotepadStore((s) => s.flashcards)
+  const quizzes = useNotepadStore((s) => s.quizzes)
   const selectedChapterId = useNotepadStore((s) => s.selectedChapterId)
   const selectedNoteId = useNotepadStore((s) => s.selectedNoteId)
   const selectedCardId = useNotepadStore((s) => s.selectedCardId)
+  const selectedQuizId = useNotepadStore((s) => s.selectedQuizId)
   const searchQuery = useNotepadStore((s) => s.searchQuery)
   const chapterTab = useNotepadStore((s) => s.chapterTab)
   const setChapterTab = useNotepadStore((s) => s.setChapterTab)
   const {
     addNote,
     addCard,
+    addQuiz,
+    updateQuiz,
+    deleteQuiz,
+    duplicateQuiz,
     selectNote,
     selectCard,
+    selectQuiz,
     setSearchQuery,
     togglePin,
     deleteNote,
@@ -173,11 +184,14 @@ export function NotesPane({ onBack, onOpenNote, onImportMd }: NotesPaneProps) {
 
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null)
   const [cardToDelete, setCardToDelete] = useState<Flashcard | null>(null)
+  const [quizToDelete, setQuizToDelete] = useState<Quiz | null>(null)
+  const [quizToRename, setQuizToRename] = useState<Quiz | null>(null)
 
   const chapter = chapters.find((c) => c.id === selectedChapterId) ?? null
   const subject = chapter ? (subjects.find((s) => s.id === chapter.subjectId) ?? null) : null
   const searching = searchQuery.trim().length > 0
   const showingFlashcards = chapterTab === 'flashcards' && !!chapter
+  const showingQuiz = chapterTab === 'quiz' && !!chapter
   const notesOfChapter = chapter ? notes.filter((n) => n.chapterId === chapter.id).length : 0
 
   // ---------- arrange mode (⠿ Move from a note's ⋯ menu) ----------
@@ -203,6 +217,11 @@ export function NotesPane({ onBack, onOpenNote, onImportMd }: NotesPaneProps) {
 
   const deck = useMemo(() => chapterDeck(flashcards, chapter?.id ?? null), [flashcards, chapter])
 
+  const quizList = useMemo(
+    () => chapterQuizList(quizzes, chapter?.id ?? null),
+    [quizzes, chapter],
+  )
+
   const handleNoteClick = (note: Note) => {
     if (arranging) return
     selectNote(note.id)
@@ -221,6 +240,16 @@ export function NotesPane({ onBack, onOpenNote, onImportMd }: NotesPaneProps) {
 
   const handleNewCard = () => {
     if (chapter) addCard(chapter.id)
+    onOpenNote?.()
+  }
+
+  const handleNewQuiz = () => {
+    if (chapter) addQuiz(chapter.id)
+    onOpenNote?.()
+  }
+
+  const handleQuizClick = (quiz: Quiz) => {
+    selectQuiz(quiz.id)
     onOpenNote?.()
   }
 
@@ -291,6 +320,11 @@ export function NotesPane({ onBack, onOpenNote, onImportMd }: NotesPaneProps) {
                     <Plus className="h-4 w-4" />
                     <span className="hidden sm:inline">Card</span>
                   </Button>
+                ) : showingQuiz ? (
+                  <Button size="sm" onClick={handleNewQuiz} disabled={!chapter} title="New quiz">
+                    <Plus className="h-4 w-4" />
+                    <span className="hidden sm:inline">Quiz</span>
+                  </Button>
                 ) : (
                   <Button size="sm" onClick={handleNewNote} disabled={!chapter} title="New note">
                     <Plus className="h-4 w-4" />
@@ -302,15 +336,15 @@ export function NotesPane({ onBack, onOpenNote, onImportMd }: NotesPaneProps) {
           )}
         </div>
 
-        {/* Workspace tabs — Notes | Flashcards (a chapter has both) */}
+        {/* Workspace tabs — Notes | Flashcards | Quiz (a chapter has all three) */}
         {chapter && !arranging && (
           <div className="flex w-fit items-center rounded-lg border p-0.5" role="tablist" aria-label="Chapter workspace">
             <Button
               size="sm"
-              variant={showingFlashcards ? 'ghost' : 'secondary'}
+              variant={showingFlashcards || showingQuiz ? 'ghost' : 'secondary'}
               className="h-7 gap-1.5 px-2.5 text-xs"
               role="tab"
-              aria-selected={!showingFlashcards}
+              aria-selected={!showingFlashcards && !showingQuiz}
               onClick={() => setChapterTab('notes')}
             >
               <StickyNote className="h-3.5 w-3.5" />
@@ -329,6 +363,18 @@ export function NotesPane({ onBack, onOpenNote, onImportMd }: NotesPaneProps) {
               Flashcards
               <span className="tabular-nums text-muted-foreground">{deck.length}</span>
             </Button>
+            <Button
+              size="sm"
+              variant={showingQuiz ? 'secondary' : 'ghost'}
+              className="h-7 gap-1.5 px-2.5 text-xs"
+              role="tab"
+              aria-selected={showingQuiz}
+              onClick={() => setChapterTab('quiz')}
+            >
+              <ClipboardList className="h-3.5 w-3.5" />
+              Quiz
+              <span className="tabular-nums text-muted-foreground">{quizList.length}</span>
+            </Button>
           </div>
         )}
 
@@ -343,6 +389,13 @@ export function NotesPane({ onBack, onOpenNote, onImportMd }: NotesPaneProps) {
             {deck.length === 0
               ? 'Empty deck — add your first flashcard below.'
               : 'Open a card to make it — or hit View in the workspace to study.'}
+          </p>
+        ) : showingQuiz ? (
+          <p className="flex items-center gap-1.5 rounded-md border border-dashed border-violet-600/30 bg-violet-600/5 px-3 py-2 text-xs leading-4 text-muted-foreground">
+            <ClipboardList className="h-3.5 w-3.5 shrink-0 text-violet-600 dark:text-violet-400" />
+            {quizList.length === 0
+              ? 'No quizzes here yet — add one to get started.'
+              : 'Open a quiz to build it — or hit Attempt in the workspace to take it.'}
           </p>
         ) : (
           <div className="relative">
@@ -444,6 +497,78 @@ export function NotesPane({ onBack, onOpenNote, onImportMd }: NotesPaneProps) {
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem variant="destructive" onClick={() => setCardToDelete(card)}>
+                        <Trash2 className="h-4 w-4" /> Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : showingQuiz ? (
+          quizList.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+              <ClipboardList className="h-9 w-9 text-muted-foreground/40" />
+              <p className="text-sm font-medium">No quizzes yet</p>
+              <p className="max-w-xs text-xs text-muted-foreground">
+                Build a quiz for this chapter — one question at a time.
+              </p>
+              <Button size="sm" variant="outline" onClick={handleNewQuiz}>
+                <Plus className="h-4 w-4" /> New quiz
+              </Button>
+            </div>
+          ) : (
+            <ul className="space-y-1.5">
+              {quizList.map((quiz, i) => (
+                <li key={quiz.id} className="group/quiz relative">
+                  <button
+                    type="button"
+                    onClick={() => handleQuizClick(quiz)}
+                    className={cn(
+                      'w-full rounded-lg border p-3 pr-10 text-left transition-colors',
+                      quiz.id === selectedQuizId
+                        ? 'border-transparent bg-accent'
+                        : 'border-transparent hover:border-border hover:bg-accent/50',
+                    )}
+                    aria-label={`Open quiz ${quiz.title}`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 w-6 shrink-0 rounded border bg-muted/60 px-1 py-px text-center text-[10px] font-semibold tabular-nums text-muted-foreground">
+                        {i + 1}
+                      </span>
+                      <p className="min-w-0 flex-1 break-words text-sm font-medium line-clamp-2">
+                        {quiz.title}
+                      </p>
+                    </div>
+                    <p className="mt-1 pl-8 text-xs text-muted-foreground">
+                      {quiz.questions.length} question{quiz.questions.length === 1 ? '' : 's'}
+                    </p>
+                    <div className="mt-2 flex items-center gap-2 pl-8 text-[11px] text-muted-foreground">
+                      <span className="tabular-nums">
+                        {formatDistanceToNow(new Date(quiz.updatedAt), { addSuffix: true })}
+                      </span>
+                    </div>
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1.5 top-1.5 h-7 w-7 opacity-0 transition-opacity group-hover/quiz:opacity-100 data-[state=open]:opacity-100"
+                        aria-label={`Options for ${quiz.title}`}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40">
+                      <DropdownMenuItem onClick={() => setQuizToRename(quiz)}>
+                        <SquarePen className="h-4 w-4" /> Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => duplicateQuiz(quiz.id)}>
+                        <Copy className="h-4 w-4" /> Duplicate
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem variant="destructive" onClick={() => setQuizToDelete(quiz)}>
                         <Trash2 className="h-4 w-4" /> Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -646,6 +771,46 @@ export function NotesPane({ onBack, onOpenNote, onImportMd }: NotesPaneProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Delete confirmation — quizzes */}
+      <AlertDialog open={quizToDelete !== null} onOpenChange={(open) => !open && setQuizToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete “{quizToDelete?.title ?? 'quiz'}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The quiz and all {quizToDelete?.questions.length ?? 0} of its questions will be
+              permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => {
+                if (quizToDelete) deleteQuiz(quizToDelete.id)
+                setQuizToDelete(null)
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Rename quiz */}
+      {quizToRename && (
+        <NameDialog
+          title="Rename quiz"
+          label="Quiz name"
+          initialName={quizToRename.title}
+          submitLabel="Rename"
+          onOpenChange={() => setQuizToRename(null)}
+          onSubmit={(name) => {
+            updateQuiz(quizToRename.id, { title: name })
+            setQuizToRename(null)
+          }}
+        />
+      )}
     </div>
   )
 }
