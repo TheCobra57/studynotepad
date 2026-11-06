@@ -84,6 +84,9 @@ export interface QuizQuestion {
   acceptedAnswers: string[]
   /** answer-following: keywords looked for in the answer — all found = correct */
   keywords: string[]
+  /** Fun-mode timer for this question, in seconds — undefined = the 20s default.
+   *  Normal mode is untimed, this only applies when playing in Fun mode. */
+  timeLimit?: number
 }
 
 export interface Quiz {

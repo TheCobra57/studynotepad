@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowDown,
   ArrowUp,
@@ -10,6 +10,9 @@ import {
   ChevronRight,
   Circle,
   ClipboardList,
+  Coins,
+  FastForward,
+  Gamepad2,
   ListChecks,
   Maximize2,
   Minimize2,
@@ -19,10 +22,13 @@ import {
   Play,
   Plus,
   RectangleHorizontal,
+  Snowflake,
   SquarePen,
   Tag,
   TextCursorInput,
+  Timer,
   Trash2,
+  TrendingUp,
   X,
   XCircle,
   type LucideIcon,
@@ -58,6 +64,22 @@ import {
   gradeAttempt,
   type QuizResponse,
 } from '@/lib/notepad/quiz'
+import {
+  BOOSTER_INFO,
+  BOOSTER_KINDS,
+  DEFAULT_TIME_LIMIT,
+  FREEZE_MS,
+  TIME_LIMIT_CHOICES,
+  bankWindow,
+  earnsBooster,
+  formatPoints,
+  funElapsed,
+  pointsFor,
+  randomBooster,
+  timeLimitOf,
+  type BoosterKind,
+  type FreezeWindow,
+} from '@/lib/notepad/fun'
 import { useToast } from '@/hooks/use-toast'
 import { BlockEditor, type BlockEditorHandle } from '../block-editor'
 import { CardFace } from '../flashcards/card-face'
@@ -79,6 +101,12 @@ const TYPE_ICONS: Record<QuizQuestionType, LucideIcon> = {
   'fill-blank': TextCursorInput,
   'name-item': Tag,
   answer: PenLine,
+}
+
+const BOOST_ICONS: Record<BoosterKind, LucideIcon> = {
+  freeze: Snowflake,
+  skip: FastForward,
+  double: TrendingUp,
 }
 
 const MAX_OPTIONS = 8
@@ -490,6 +518,8 @@ function CreateWorkspace({ quiz }: { quiz: Quiz }) {
           />
         )}
 
+        <TimerConfig question={question} patch={patch} />
+
         <p className="pb-2 text-center text-[11px] text-muted-foreground">
           Type <span className="font-semibold">/</span> for commands — tables, images, equations,
           labels. Questions render fully when you attempt the quiz.
@@ -772,19 +802,252 @@ function KeywordsConfig({
   )
 }
 
+function TimerConfig({ question, patch }: { question: QuizQuestion; patch: PatchFn }) {
+  const current = timeLimitOf(question)
+  return (
+    <section>
+      <ConfigHeader
+        label="Fun-mode timer"
+        hint="time per question in Fun mode · Normal mode is untimed"
+      />
+      <p className="mb-2 text-xs leading-5 text-muted-foreground">
+        When a quiz is played in <span className="font-semibold">Fun mode</span> each question
+        runs on its own timer — running out scores zero, so set a fair limit for this question.
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {TIME_LIMIT_CHOICES.map((sec) => (
+          <Button
+            key={sec}
+            size="sm"
+            variant={current === sec ? 'secondary' : 'ghost'}
+            className={cn(
+              'h-8 gap-1 border px-3 text-xs tabular-nums',
+              current === sec
+                ? 'border-violet-600/40 bg-violet-600/10 text-violet-700 dark:text-violet-400'
+                : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
+            )}
+            onClick={() => patch({ timeLimit: sec })}
+            aria-pressed={current === sec}
+          >
+            <Timer className="h-3.5 w-3.5" />
+            {sec}s
+          </Button>
+        ))}
+        {current !== DEFAULT_TIME_LIMIT && (
+          <span className="text-[11px] text-muted-foreground">
+            default is {DEFAULT_TIME_LIMIT}s
+          </span>
+        )}
+      </div>
+    </section>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Attempt mode — one question on screen at a time, instant feedback
 // ---------------------------------------------------------------------------
+
+type BoostInventory = Record<BoosterKind, number>
+
+/** per-question stats kept while playing Fun mode, surfaced on the results screen */
+interface FunQuestionStat {
+  points: number
+  elapsedMs: number
+  booster: BoosterKind | null
+  skipped: boolean
+  timedOut: boolean
+  double: boolean
+}
+
+interface FunAttemptStats {
+  totalPoints: number
+  perQuestion: Record<string, FunQuestionStat>
+}
 
 function AttemptWorkspace({ quiz }: { quiz: Quiz }) {
   const setQuizMode = useNotepadStore((s) => s.setQuizMode)
   const questions = quiz.questions
 
+  // null = the mode lobby, false = Normal (untimed, as before), true = Fun
+  const [fun, setFun] = useState<boolean | null>(null)
   const [idx, setIdx] = useState(0)
   const [choices, setChoices] = useState<Record<string, number>>({})
   const [texts, setTexts] = useState<Record<string, string>>({})
   const [checked, setChecked] = useState<Record<string, boolean>>({})
   const [finished, setFinished] = useState(false)
+
+  // ---- Fun-mode session state — lives only for this play-through ----
+  const [points, setPoints] = useState(0)
+  const [boosts, setBoosts] = useState<BoostInventory>({ freeze: 0, skip: 0, double: 0 })
+  const [qPoints, setQPoints] = useState<Record<string, number>>({})
+  const [qElapsed, setQElapsed] = useState<Record<string, number>>({})
+  const [qBooster, setQBooster] = useState<Record<string, BoosterKind | null>>({})
+  const [qSkipped, setQSkipped] = useState<Record<string, boolean>>({})
+  const [qTimedOut, setQTimedOut] = useState<Record<string, boolean>>({})
+  const [qDouble, setQDouble] = useState<Record<string, boolean>>({})
+  // wall-clock bookkeeping for the question currently on screen
+  const [startAt, setStartAt] = useState(0)
+  const [freeze, setFreeze] = useState<FreezeWindow | null>(null)
+  const [freezeBanked, setFreezeBanked] = useState(0)
+  const [timeLeft, setTimeLeft] = useState(0)
+  const [armedDouble, setArmedDouble] = useState(false)
+
+  const isFun = fun === true
+
+  const safeIdx = Math.min(idx, Math.max(0, questions.length - 1))
+  const question = questions[safeIdx]
+  const questionId = question?.id ?? null
+  const isChecked = question ? !!checked[question.id] : false
+  const limitMs = question ? timeLimitOf(question) * 1000 : DEFAULT_TIME_LIMIT * 1000
+
+  const responseFor = (q: QuizQuestion): QuizResponse =>
+    q.type === 'mcq' ? { choice: choices[q.id] } : { text: texts[q.id] ?? '' }
+
+  const grading = question && isChecked ? gradeAnswer(question, responseFor(question)) : null
+  const hasAnswer = question
+    ? question.type === 'mcq'
+      ? choices[question.id] !== undefined
+      : (texts[question.id] ?? '').trim().length > 0
+    : false
+
+  /** start the clock over for question i — every fresh question gets a full timer */
+  const beginQuestion = (i: number) => {
+    setIdx(i)
+    if (fun) {
+      setStartAt(Date.now())
+      setFreeze(null)
+      setFreezeBanked(0)
+      setTimeLeft(timeLimitOf(questions[i]) * 1000)
+      setArmedDouble(false)
+    }
+  }
+
+  const check = () => {
+    if (!question || isChecked) return
+    if (isFun) {
+      const now = Date.now()
+      const elapsed = funElapsed(startAt, now, freeze, freezeBanked)
+      // stop any running freeze — the answer is in
+      if (freeze) {
+        setFreezeBanked((b) => b + Math.max(0, Math.min(now, freeze.end) - freeze.start))
+        setFreeze(null)
+      }
+      const qid = question.id
+      const g = gradeAnswer(question, responseFor(question))
+      const pts = pointsFor({
+        limitSec: timeLimitOf(question),
+        elapsedMs: elapsed,
+        accuracy: g.accuracy,
+        double: armedDouble,
+      })
+      setQElapsed((m) => ({ ...m, [qid]: elapsed }))
+      setQPoints((m) => ({ ...m, [qid]: pts }))
+      setPoints((p) => p + pts)
+      if (armedDouble) setQDouble((m) => ({ ...m, [qid]: true }))
+      // a fast attempt earns a random booster — right or wrong, as long as an
+      // answer was actually written. 5s for MCQ/fill/name, 10s for long answers.
+      if (hasAnswer && earnsBooster(question.type, elapsed)) {
+        const booster = randomBooster()
+        setBoosts((inv) => ({ ...inv, [booster]: inv[booster] + 1 }))
+        setQBooster((m) => ({ ...m, [qid]: booster }))
+      }
+      setArmedDouble(false)
+    }
+    setChecked((c) => ({ ...c, [question.id]: true }))
+  }
+
+  // The Fun-mode countdown runs on the wall clock, so hiding or leaving the
+  // tab does not pause it — when the deadline passes the question is submitted
+  // as-is, even if that is only noticed on the next tick after coming back.
+  useEffect(() => {
+    if (!isFun || finished || isChecked || !questionId) return
+    const evaluate = () => {
+      const now = Date.now()
+      // fold a finished freeze window into the bank; the next tick measures on
+      if (freeze && now >= freeze.end) {
+        setFreezeBanked((b) => b + bankWindow(freeze))
+        setFreeze(null)
+        return
+      }
+      const elapsed = funElapsed(startAt, now, freeze, freezeBanked)
+      const left = Math.max(0, limitMs - elapsed)
+      setTimeLeft(left)
+      if (left <= 0) {
+        // time's up — whatever is on screen gets submitted as-is
+        if (freeze) {
+          setFreezeBanked((b) => b + Math.max(0, Math.min(now, freeze.end) - freeze.start))
+          setFreeze(null)
+        }
+        setQElapsed((m) => ({ ...m, [questionId]: elapsed }))
+        setQTimedOut((m) => ({ ...m, [questionId]: true }))
+        setChecked((c) => ({ ...c, [questionId]: true }))
+      }
+    }
+    const timer = window.setInterval(evaluate, 200)
+    // background tabs throttle intervals — re-evaluate the moment we return
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') evaluate()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [isFun, finished, isChecked, questionId, startAt, freeze, freezeBanked, limitMs])
+
+  const goNext = () => {
+    if (safeIdx < questions.length - 1) beginQuestion(safeIdx + 1)
+    else setFinished(true)
+  }
+
+  const useBoost = (kind: BoosterKind) => {
+    if (!isFun || !question || isChecked || boosts[kind] <= 0) return
+    if (kind === 'skip') {
+      // UNO SKIP — leave this question behind: no points, no feedback screen
+      setBoosts((inv) => ({ ...inv, skip: inv.skip - 1 }))
+      setQSkipped((m) => ({ ...m, [question.id]: true }))
+      setQPoints((m) => ({ ...m, [question.id]: 0 }))
+      goNext()
+      return
+    }
+    if (kind === 'freeze') {
+      const now = Date.now()
+      setBoosts((inv) => ({ ...inv, freeze: inv.freeze - 1 }))
+      // stacking freezes while already frozen pushes the end out further
+      setFreeze((w) =>
+        w ? { start: w.start, end: w.end + FREEZE_MS } : { start: now, end: now + FREEZE_MS },
+      )
+      return
+    }
+    // double points — arms the current question
+    if (armedDouble) return
+    setBoosts((inv) => ({ ...inv, double: inv.double - 1 }))
+    setArmedDouble(true)
+  }
+
+  const start = (mode: boolean) => {
+    setFun(mode)
+    setPoints(0)
+    setBoosts({ freeze: 0, skip: 0, double: 0 })
+    setQPoints({})
+    setQElapsed({})
+    setQBooster({})
+    setQSkipped({})
+    setQTimedOut({})
+    setQDouble({})
+    setChoices({})
+    setTexts({})
+    setChecked({})
+    setFinished(false)
+    setIdx(0)
+    setStartAt(Date.now())
+    setFreeze(null)
+    setFreezeBanked(0)
+    setTimeLeft(questions.length ? timeLimitOf(questions[0]) * 1000 : 0)
+    setArmedDouble(false)
+  }
+
+  const retake = () => start(fun === true)
 
   if (questions.length === 0) {
     return (
@@ -801,48 +1064,64 @@ function AttemptWorkspace({ quiz }: { quiz: Quiz }) {
     )
   }
 
-  const safeIdx = Math.min(idx, questions.length - 1)
-  const question = questions[safeIdx]
-
-  const responseFor = (q: QuizQuestion): QuizResponse =>
-    q.type === 'mcq' ? { choice: choices[q.id] } : { text: texts[q.id] ?? '' }
-
-  const isChecked = !!checked[question.id]
-  const grading = isChecked ? gradeAnswer(question, responseFor(question)) : null
-  const hasAnswer =
-    question.type === 'mcq'
-      ? choices[question.id] !== undefined
-      : (texts[question.id] ?? '').trim().length > 0
-
-  const check = () => setChecked((c) => ({ ...c, [question.id]: true }))
-  const goNext = () => {
-    if (safeIdx < questions.length - 1) setIdx(safeIdx + 1)
-    else setFinished(true)
-  }
-  const retake = () => {
-    setIdx(0)
-    setChoices({})
-    setTexts({})
-    setChecked({})
-    setFinished(false)
-  }
-
   if (finished) {
-    return <ResultsScreen quiz={quiz} responses={responsesFrom(choices, texts, questions)} onRetake={retake} />
+    const funStats: FunAttemptStats | undefined = isFun
+      ? {
+          totalPoints: points,
+          perQuestion: Object.fromEntries(
+            questions.map((q): [string, FunQuestionStat] => [
+              q.id,
+              {
+                points: qPoints[q.id] ?? 0,
+                elapsedMs: qElapsed[q.id] ?? 0,
+                booster: qBooster[q.id] ?? null,
+                skipped: !!qSkipped[q.id],
+                timedOut: !!qTimedOut[q.id],
+                double: !!qDouble[q.id],
+              },
+            ]),
+          ),
+        }
+      : undefined
+    return (
+      <ResultsScreen
+        quiz={quiz}
+        responses={responsesFrom(choices, texts, questions)}
+        onRetake={retake}
+        onChangeMode={() => {
+          // leave the results screen — the lobby picks up from here
+          setFinished(false)
+          setFun(null)
+        }}
+        fun={funStats}
+      />
+    )
+  }
+
+  if (fun === null) {
+    return <FunLobby quiz={quiz} onStart={start} />
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-4 py-4 md:px-6">
-        {/* progress */}
+        {/* progress + live score */}
         <div className="shrink-0">
           <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
             <span className="tabular-nums">
               Question {safeIdx + 1} of {questions.length}
             </span>
-            <span className="tabular-nums">
-              {Object.keys(checked).length} checked
-            </span>
+            {isFun ? (
+              <span
+                className="flex items-center gap-1 rounded-full border bg-muted/60 px-2 py-0.5 text-xs font-semibold text-foreground tabular-nums"
+                title="Points earned this run"
+              >
+                <Coins className="h-3.5 w-3.5 text-amber-500" />
+                {formatPoints(points)}
+              </span>
+            ) : (
+              <span className="tabular-nums">{Object.keys(checked).length} checked</span>
+            )}
           </div>
           <Progress
             value={((safeIdx + (isChecked ? 1 : 0)) / questions.length) * 100}
@@ -851,11 +1130,25 @@ function AttemptWorkspace({ quiz }: { quiz: Quiz }) {
           />
         </div>
 
+        {/* Fun mode — countdown + boosters, live question only */}
+        {isFun && !isChecked && (
+          <div className="mt-3 shrink-0 space-y-3">
+            <TimerBar limitMs={limitMs} leftMs={timeLeft} frozen={freeze !== null} />
+            <BoostBar inventory={boosts} onUse={useBoost} />
+          </div>
+        )}
+
         {/* the question — scrollable */}
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4">
           <div className="rounded-2xl border bg-card p-4 shadow-sm md:p-5">
             <div className="mb-2 flex items-center gap-2">
               <TypeBadge type={question.type} />
+              {isFun && (
+                <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums">
+                  <Timer className="h-3 w-3" />
+                  {timeLimitOf(question)}s limit
+                </span>
+              )}
             </div>
             <CardFace markdown={question.prompt} />
           </div>
@@ -903,7 +1196,23 @@ function AttemptWorkspace({ quiz }: { quiz: Quiz }) {
           )}
 
           {/* feedback */}
-          {grading && <Feedback question={question} grading={grading} />}
+          {grading && (
+            <Feedback
+              question={question}
+              grading={grading}
+              fun={
+                isFun
+                  ? {
+                      pts: qPoints[question.id] ?? 0,
+                      elapsedMs: qElapsed[question.id] ?? 0,
+                      timedOut: !!qTimedOut[question.id],
+                      booster: qBooster[question.id] ?? null,
+                      double: !!qDouble[question.id],
+                    }
+                  : undefined
+              }
+            />
+          )}
         </div>
 
         {/* controls */}
@@ -913,7 +1222,8 @@ function AttemptWorkspace({ quiz }: { quiz: Quiz }) {
             size="sm"
             className="h-8 gap-1 px-2.5"
             onClick={() => setIdx(safeIdx - 1)}
-            disabled={safeIdx === 0}
+            disabled={safeIdx === 0 || isFun}
+            title={isFun ? 'No going back in Fun mode' : 'Previous question'}
             aria-label="Previous question"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -1036,9 +1346,18 @@ function McqAttempt({
 function Feedback({
   question,
   grading,
+  fun,
 }: {
   question: QuizQuestion
   grading: ReturnType<typeof gradeAnswer>
+  /** Fun-mode extras — undefined in Normal mode */
+  fun?: {
+    pts: number
+    elapsedMs: number
+    timedOut: boolean
+    booster: BoosterKind | null
+    double: boolean
+  }
 }) {
   const correct = grading.correct
   return (
@@ -1052,7 +1371,9 @@ function Feedback({
       )}
     >
       <div className="flex items-center gap-2">
-        {correct ? (
+        {fun?.timedOut ? (
+          <Timer className="h-5 w-5 shrink-0 text-red-500" />
+        ) : correct ? (
           <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
         ) : (
           <XCircle className="h-5 w-5 shrink-0 text-red-500" />
@@ -1060,16 +1381,43 @@ function Feedback({
         <p
           className={cn(
             'text-sm font-semibold',
-            correct ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400',
+            correct
+              ? 'text-emerald-700 dark:text-emerald-400'
+              : 'text-red-600 dark:text-red-400',
           )}
         >
-          {correct
-            ? question.type === 'answer' && grading.accuracy < 1
-              ? 'Correct'
-              : 'Correct!'
-            : 'Not quite'}
+          {fun?.timedOut
+            ? "Time's up!"
+            : correct
+              ? question.type === 'answer' && grading.accuracy < 1
+                ? 'Correct'
+                : 'Correct!'
+              : 'Not quite'}
         </p>
+        {fun && (
+          <span
+            className="ml-auto flex items-center gap-1 rounded-full border bg-background/70 px-2 py-0.5 text-xs font-semibold tabular-nums"
+            title="Points earned for this question"
+          >
+            <Coins className="h-3.5 w-3.5 text-amber-500" />
+            +{formatPoints(fun.pts)}
+          </span>
+        )}
       </div>
+
+      {fun && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="rounded-full border bg-background/70 px-2 py-0.5 text-[11px] text-muted-foreground tabular-nums">
+            answered in {(fun.elapsedMs / 1000).toFixed(1)}s
+          </span>
+          {fun.double && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-violet-600/40 bg-violet-600/10 px-2 py-0.5 text-[11px] font-semibold text-violet-700 dark:text-violet-400">
+              <TrendingUp className="h-3 w-3" /> Double points
+            </span>
+          )}
+          {fun.booster && <BoosterBadge kind={fun.booster} />}
+        </div>
+      )}
 
       {question.type === 'answer' && grading.keywordHits && (
         <>
@@ -1122,10 +1470,15 @@ function ResultsScreen({
   quiz,
   responses,
   onRetake,
+  onChangeMode,
+  fun,
 }: {
   quiz: Quiz
   responses: Record<string, QuizResponse>
   onRetake: () => void
+  /** Fun mode only — back to the Normal/Fun picker */
+  onChangeMode?: () => void
+  fun?: FunAttemptStats
 }) {
   const setQuizMode = useNotepadStore((s) => s.setQuizMode)
   const { correctCount, total, perQuestion } = gradeAttempt(quiz.questions, responses)
@@ -1146,18 +1499,34 @@ function ResultsScreen({
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Quiz complete
           </p>
-          <p className="mt-2 text-4xl font-bold tabular-nums">
-            {correctCount} / {total}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {pct}% correct — {message}
-          </p>
+          {fun ? (
+            <>
+              <p className="mt-2 flex items-center justify-center gap-2 text-4xl font-bold tabular-nums">
+                <Coins className="h-8 w-8 text-amber-500" />
+                {formatPoints(fun.totalPoints)}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                points earned · {correctCount} / {total} correct ({pct}%)
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-2 text-4xl font-bold tabular-nums">
+                {correctCount} / {total}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {pct}% correct — {message}
+              </p>
+            </>
+          )}
           <Progress value={pct} className="mx-auto mt-4 h-1.5 max-w-xs" aria-label="Score" />
         </div>
 
         <ul className="space-y-1.5">
           {quiz.questions.map((q, i) => {
             const g = perQuestion[q.id]
+            const stat = fun?.perQuestion[q.id]
+            const skipped = stat?.skipped ?? false
             const excerpt =
               q.prompt
                 .replace(/!\[[^\]]*\]\([^)]*\)/g, ' [image] ')
@@ -1165,6 +1534,12 @@ function ResultsScreen({
                 .split('\n')
                 .map((l) => l.trim())
                 .find(Boolean) ?? '(empty question)'
+            const metaBits = [QUIZ_TYPE_SHORT[q.type]]
+            if (skipped) metaBits.push('skipped')
+            if (stat?.timedOut) metaBits.push("time's up")
+            if (stat?.double) metaBits.push('×2 points')
+            if (q.type === 'answer') metaBits.push(`${Math.round(g.accuracy * 100)}% keywords`)
+            if (stat?.booster) metaBits.push(`+1 ${BOOSTER_INFO[stat.booster].label}`)
             return (
               <li
                 key={q.id}
@@ -1173,20 +1548,30 @@ function ResultsScreen({
                 <span
                   className={cn(
                     'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white',
-                    g.correct ? 'bg-emerald-600' : 'bg-red-500',
+                    skipped
+                      ? 'bg-muted-foreground/60'
+                      : g.correct
+                        ? 'bg-emerald-600'
+                        : 'bg-red-500',
                   )}
                   aria-hidden
                 >
-                  {i + 1}
+                  {skipped ? <FastForward className="h-3 w-3" /> : i + 1}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{excerpt}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {QUIZ_TYPE_SHORT[q.type]}
-                    {q.type === 'answer' && ` · ${Math.round(g.accuracy * 100)}% keywords`}
-                  </p>
+                  <p className="text-[11px] text-muted-foreground">{metaBits.join(' · ')}</p>
                 </div>
-                {g.correct ? (
+                {fun ? (
+                  <div className="flex shrink-0 flex-col items-end leading-tight">
+                    <span className="text-xs font-bold tabular-nums">
+                      {formatPoints(stat?.points ?? 0)} pts
+                    </span>
+                    <span className="text-[10px] text-muted-foreground tabular-nums">
+                      {skipped ? '—' : `${((stat?.elapsedMs ?? 0) / 1000).toFixed(1)}s`}
+                    </span>
+                  </div>
+                ) : g.correct ? (
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
                 ) : (
                   <XCircle className="h-4 w-4 shrink-0 text-red-500" />
@@ -1196,15 +1581,220 @@ function ResultsScreen({
           })}
         </ul>
 
-        <div className="flex items-center justify-center gap-2 pb-4">
+        <div className="flex flex-wrap items-center justify-center gap-2 pb-4">
           <Button size="sm" className="gap-1.5" onClick={onRetake}>
-            <Play className="h-3.5 w-3.5" /> Retake quiz
+            <Play className="h-3.5 w-3.5" /> {fun ? 'Play again' : 'Retake quiz'}
           </Button>
+          {fun && onChangeMode && (
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={onChangeMode}>
+              <Gamepad2 className="h-3.5 w-3.5" /> Change mode
+            </Button>
+          )}
           <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setQuizMode('create')}>
             <SquarePen className="h-3.5 w-3.5" /> Back to Create
           </Button>
         </div>
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Fun-mode lobby — pick Normal or Fun before the questions start
+// ---------------------------------------------------------------------------
+
+function FunLobby({ quiz, onStart }: { quiz: Quiz; onStart: (fun: boolean) => void }) {
+  const totalTimed = quiz.questions.reduce((sum, q) => sum + timeLimitOf(q), 0)
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto w-full max-w-2xl space-y-4 px-4 py-8 md:px-6">
+        <div className="text-center">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Attempt mode
+          </p>
+          <h2 className="mt-1 text-xl font-bold">{quiz.title}</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {quiz.questions.length} question{quiz.questions.length === 1 ? '' : 's'} · one on
+            screen at a time
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => onStart(false)}
+            className="rounded-2xl border bg-card p-5 text-left shadow-sm transition-colors hover:border-violet-600/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600/40"
+          >
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted">
+                <Play className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-sm font-bold">Normal</p>
+                <p className="text-[11px] text-muted-foreground">the classic practice run</p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+              No timer, no points. Read each question at your own pace and check the answer when
+              you are ready.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onStart(true)}
+            className="rounded-2xl border border-violet-600/30 bg-card p-5 text-left shadow-sm transition-colors hover:border-violet-600/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600/40"
+          >
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600/10 text-violet-700 dark:text-violet-400">
+                <Gamepad2 className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-sm font-bold">Fun</p>
+                <p className="text-[11px] text-muted-foreground">timers · points · boosters</p>
+              </div>
+            </div>
+            <ul className="mt-3 space-y-1.5 text-xs leading-5 text-muted-foreground">
+              <li className="flex items-start gap-1.5">
+                <Timer className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600 dark:text-violet-400" />
+                <span>
+                  every question runs on its timer ({totalTimed}s total here) — leave the tab and
+                  it keeps running, and running out scores zero
+                </span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <Coins className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                <span>the faster you answer, the more points you bank</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <Snowflake className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-500" />
+                <span>
+                  answer within 5s (10s for long answers) to earn a random booster — spend them
+                  with the boost bar
+                </span>
+              </li>
+            </ul>
+          </button>
+        </div>
+
+        <p className="text-center text-[11px] text-muted-foreground">
+          Boosters:{' '}
+          {BOOSTER_KINDS.map((k) => `${BOOSTER_INFO[k].label} — ${BOOSTER_INFO[k].how}`).join(' · ')}
+          . Per-question timers are set in Create mode.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Fun-mode pieces — countdown bar, boost bar, booster badge
+// ---------------------------------------------------------------------------
+
+function TimerBar({
+  limitMs,
+  leftMs,
+  frozen,
+}: {
+  limitMs: number
+  leftMs: number
+  frozen: boolean
+}) {
+  const pct = Math.max(0, Math.min(100, (leftMs / Math.max(1, limitMs)) * 100))
+  const danger = !frozen && pct <= 25
+  return (
+    <div role="timer" aria-label={frozen ? 'Timer frozen' : 'Time left'}>
+      <div className="mb-1 flex items-center justify-between text-xs">
+        <span
+          className={cn(
+            'flex items-center gap-1 font-medium',
+            frozen
+              ? 'text-sky-600 dark:text-sky-400'
+              : danger
+                ? 'text-red-600 dark:text-red-400'
+                : 'text-muted-foreground',
+          )}
+        >
+          {frozen ? <Snowflake className="h-3.5 w-3.5" /> : <Timer className="h-3.5 w-3.5" />}
+          {frozen ? 'Frozen' : 'Time left'}
+        </span>
+        <span
+          className={cn(
+            'font-semibold tabular-nums',
+            frozen
+              ? 'text-sky-600 dark:text-sky-400'
+              : danger
+                ? 'text-red-600 dark:text-red-400'
+                : 'text-foreground',
+          )}
+        >
+          {(leftMs / 1000).toFixed(1)}s
+        </span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn(
+            'h-full rounded-full',
+            frozen ? 'bg-sky-400' : danger ? 'bg-red-500' : 'bg-violet-500',
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function BoostBar({
+  inventory,
+  onUse,
+}: {
+  inventory: BoostInventory
+  onUse: (kind: BoosterKind) => void
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Boosters — answer fast to earn more
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {BOOSTER_KINDS.map((kind) => {
+          const Icon = BOOST_ICONS[kind]
+          const count = inventory[kind]
+          return (
+            <Button
+              key={kind}
+              size="sm"
+              variant="outline"
+              className={cn('h-8 gap-1.5 px-2.5 text-xs', count === 0 && 'opacity-50')}
+              onClick={() => onUse(kind)}
+              disabled={count === 0}
+              title={`${BOOSTER_INFO[kind].how} — you have ${count}`}
+            >
+              <Icon
+                className={cn(
+                  'h-3.5 w-3.5',
+                  kind === 'freeze' && 'text-sky-500',
+                  kind === 'skip' && 'text-violet-500',
+                  kind === 'double' && 'text-amber-500',
+                )}
+              />
+              {BOOSTER_INFO[kind].label}
+              <span className="rounded-full bg-muted px-1.5 text-[10px] font-bold tabular-nums">
+                ×{count}
+              </span>
+            </Button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function BoosterBadge({ kind }: { kind: BoosterKind }) {
+  const Icon = BOOST_ICONS[kind]
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+      <Icon className="h-3 w-3" /> +1 {BOOSTER_INFO[kind].label}
+    </span>
   )
 }

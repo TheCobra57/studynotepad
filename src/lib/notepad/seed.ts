@@ -376,6 +376,7 @@ const seedQuizQuestions: QuizQuestion[] = [
         'The total number of reactions',
       ],
       correctOption: 0,
+      timeLimit: 20,
     },
   ),
   q(
@@ -386,6 +387,7 @@ const seedQuizQuestions: QuizQuestion[] = [
 $$\\ce{N2 + 3H2 -> 2NH3}$$`,
     {
       acceptedAnswers: ['ammonia', 'NH3'],
+      timeLimit: 20,
     },
   ),
   q(
@@ -398,6 +400,7 @@ $$\\ce{Zn + 2HCl -> ZnCl2 + H2 ^}$$
 Name the gas given off (the ____ in the equation).`,
     {
       acceptedAnswers: ['hydrogen', 'H2'],
+      timeLimit: 20,
     },
   ),
   q(
@@ -406,6 +409,7 @@ Name the gas given off (the ____ in the equation).`,
     `Explain why increasing the temperature increases the rate of a reaction.`,
     {
       keywords: ['collision', 'energy', 'frequent'],
+      timeLimit: 30,
     },
   ),
 ]
