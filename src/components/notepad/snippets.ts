@@ -17,6 +17,7 @@ export type CommandIcon =
   | 'clipboard'
   | 'whiteboard'
   | 'toc'
+  | 'label'
 
 export type ImageAction = 'upload' | 'clipboard' | 'whiteboard'
 
@@ -182,6 +183,14 @@ export const BLOCK_COMMANDS: SlashCommand[] = [
     keywords: 'math inline latex $ formula small',
     icon: 'math',
     inline: '$x^2 + y^2$',
+  },
+  {
+    id: 'label',
+    label: 'Label',
+    hint: 'Mark words as important — darker background',
+    keywords: 'label highlight mark important tag emphasis background',
+    icon: 'label',
+    inline: '==label==',
   },
   {
     id: 'chem-inline',

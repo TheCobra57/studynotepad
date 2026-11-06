@@ -42,6 +42,7 @@ import { useChromeVisibility } from '@/hooks/use-chrome-visibility'
 import { Sidebar } from '@/components/notepad/sidebar'
 import { NotesPane } from '@/components/notepad/notes-pane'
 import { EditorPane } from '@/components/notepad/editor-pane'
+import { FlashcardsPane } from '@/components/notepad/flashcards/flashcards-pane'
 import { CheatSheet } from '@/components/notepad/cheat-sheet'
 import { WelcomeDialog, type WelcomeChoice } from '@/components/notepad/welcome-dialog'
 import { ThemeToggle } from '@/components/notepad/theme-toggle'
@@ -157,6 +158,8 @@ export default function Home() {
   const subjects = useNotepadStore((s) => s.subjects)
   const chapters = useNotepadStore((s) => s.chapters)
   const notes = useNotepadStore((s) => s.notes)
+  const flashcards = useNotepadStore((s) => s.flashcards)
+  const chapterTab = useNotepadStore((s) => s.chapterTab)
   const { importData, clearAll } = useNotepadStore()
   const { toast } = useToast()
 
@@ -166,6 +169,7 @@ export default function Home() {
       subjects: state.subjects,
       chapters: state.chapters,
       notes: state.notes,
+      flashcards: state.flashcards,
       exportedAt: new Date().toISOString(),
       version: 1,
     }
@@ -178,7 +182,7 @@ export default function Home() {
     URL.revokeObjectURL(url)
     toast({
       title: 'Backup downloaded',
-      description: `${state.notes.length} notes exported as JSON.`,
+      description: `${state.notes.length} notes and ${state.flashcards.length} flashcards exported as JSON.`,
     })
   }
 
@@ -195,12 +199,16 @@ export default function Home() {
         subjects: data.subjects,
         chapters: data.chapters,
         notes: data.notes,
+        // backups from V2 and older have no flashcards — the deck starts empty
+        ...(Array.isArray(data.flashcards) ? { flashcards: data.flashcards } : {}),
         exportedAt: data.exportedAt ?? new Date().toISOString(),
         version: 1,
       })
       toast({
         title: 'Backup restored',
-        description: `${data.notes.length} notes imported successfully.`,
+        description: `${data.notes.length} notes and ${
+          Array.isArray(data.flashcards) ? data.flashcards.length : 0
+        } flashcards imported successfully.`,
       })
     } catch {
       toast({
@@ -364,23 +372,33 @@ export default function Home() {
               ? 'block'
               : cn('lg:block', mobileView === 'editor' ? 'block' : 'hidden'),
           )}
-          aria-label="Note editor"
+          aria-label={chapterTab === 'flashcards' ? 'Flashcards workspace' : 'Note editor'}
         >
-          <EditorPane
-            onBack={() => setMobileView('notes')}
-            onOpenSidebar={() => setMobileView('tree')}
-            onOpenCheatSheet={() => setCheatOpen(true)}
-            onPrint={() => setPrintOpen(true)}
-            focusMode={focusMode}
-            onEnterFocus={enterFocus}
-            onExitFocus={exitFocus}
-            toolbarHidden={toolbarHidden}
-            toolbarPinned={toolbarPinned}
-            toolbarDismissed={toolbarDismissed}
-            onToggleToolbarPinned={toggleToolbarPinned}
-            onToggleToolbarHidden={toggleToolbarHidden}
-            onRevealToolbar={showToolbar}
-          />
+          {chapterTab === 'flashcards' ? (
+            <FlashcardsPane
+              onBack={() => setMobileView('notes')}
+              onOpenSidebar={() => setMobileView('tree')}
+              focusMode={focusMode}
+              onEnterFocus={enterFocus}
+              onExitFocus={exitFocus}
+            />
+          ) : (
+            <EditorPane
+              onBack={() => setMobileView('notes')}
+              onOpenSidebar={() => setMobileView('tree')}
+              onOpenCheatSheet={() => setCheatOpen(true)}
+              onPrint={() => setPrintOpen(true)}
+              focusMode={focusMode}
+              onEnterFocus={enterFocus}
+              onExitFocus={exitFocus}
+              toolbarHidden={toolbarHidden}
+              toolbarPinned={toolbarPinned}
+              toolbarDismissed={toolbarDismissed}
+              onToggleToolbarPinned={toggleToolbarPinned}
+              onToggleToolbarHidden={toggleToolbarHidden}
+              onRevealToolbar={showToolbar}
+            />
+          )}
         </section>
       </main>
 
@@ -388,11 +406,11 @@ export default function Home() {
       {!focusActive && (
       <footer className="mt-auto flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-0.5 border-t px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-[11px] text-muted-foreground">
         <span className="tabular-nums">
-          {subjects.length} subjects · {chapters.length} chapters · {notes.length} notes — stored
-          in your browser
+          {subjects.length} subjects · {chapters.length} chapters · {notes.length} notes ·{' '}
+          {flashcards.length} flashcards — stored in your browser
         </span>
         <span className="hidden md:inline">
-          {'$…$'} math · {'\\ce{}'} chemistry · type / to insert · Ctrl+P print
+          {'$…$'} math · {'\\ce{}'} chemistry · ==labels== · type / to insert · Ctrl+P print
         </span>
       </footer>
       )}

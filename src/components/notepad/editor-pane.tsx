@@ -37,6 +37,7 @@ import {
   RectangleHorizontal,
   Sigma,
   Table,
+  Tag,
   Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -557,6 +558,12 @@ export function EditorPane({
             </ToolbarButton>
             <ToolbarButton label="Inline code (Ctrl+E)" onClick={() => tryWrap('`', '`', 'code')}>
               <Code className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Label — mark words as important (Ctrl+Shift+L)"
+              onClick={() => tryWrap('==', '==', 'important term')}
+            >
+              <Tag className="h-4 w-4" />
             </ToolbarButton>
 
             <Separator orientation="vertical" className="mx-1 h-5" />

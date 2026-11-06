@@ -67,8 +67,10 @@ const MD_ROWS: CheatRow[] = [
   { syntax: 'Enter / Shift+Enter', note: 'New block / line break inside a block' },
   { syntax: 'Backspace on an empty block', note: 'Merges into the previous block' },
   { syntax: '**bold** *italic* `code`', note: 'Inline formatting inside text (Ctrl+B / Ctrl+I / Ctrl+E)' },
+  { syntax: '==label==', note: 'Mark words as important — a slightly darker background chip (Ctrl+Shift+L)' },
   { syntax: '$x^2 + y^2$', latex: 'x^2 + y^2', note: 'Inline math in a sentence' },
   { syntax: '[link](https://…)', note: 'Hyperlink' },
+  { syntax: 'Flashcards tab', note: 'Every chapter has a flashcard deck — Make edits both sides (text, images, tables, equations, labels), View flips through them' },
 ]
 
 export function CheatSheet({ open, onOpenChange }: CheatSheetProps) {

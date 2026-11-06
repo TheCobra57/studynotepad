@@ -1,4 +1,4 @@
-import type { Chapter, Note, Subject } from './types'
+import type { Chapter, Flashcard, Note, Subject } from './types'
 
 const now = Date.now()
 const day = 86_400_000
@@ -274,5 +274,67 @@ $$\\ce{6CO2 + 6H2O ->[\\text{light, chlorophyll}] C6H12O6 + 6O2}$$
 $$\\ce{C6H12O6 + 6O2 -> 6CO2 + 6H2O + ATP}$$
 `,
     20,
+  ),
+]
+
+// ---------------------------------------------------------------------------
+// Seed flashcards — a small demo deck so the Flashcards tab is never a dead
+// end on first run (==label== spans demonstrate the highlight formatting).
+// ---------------------------------------------------------------------------
+
+function f(id: string, chapterId: string, front: string, back: string, ageDays: number): Flashcard {
+  return {
+    id,
+    chapterId,
+    front: front.trim(),
+    back: back.trim(),
+    createdAt: now - ageDays * day,
+    updatedAt: now - ageDays * day / 2,
+  }
+}
+
+export const seedFlashcards: Flashcard[] = [
+  f(
+    'card-chem-1',
+    'ch-chem-1',
+    `Balance this equation:
+
+$$\\ce{H2 + O2 -> H2O}$$`,
+    `$$\\ce{2H2 + O2 -> 2H2O}$$
+
+**Why the 2s?** ==Hydrogen== is diatomic, and oxygen needs two atoms to pair up — the ==law of conservation of mass== means atoms are never lost, only rearranged.`,
+    15,
+  ),
+  f(
+    'card-chem-2',
+    'ch-chem-1',
+    `What does the ==state symbol== $(aq)$ mean after a chemical species?`,
+    `**Aqueous** — dissolved in water.
+
+| State | Meaning |
+|---|---|
+| $(s)$ | solid |
+| $(l)$ | liquid |
+| $(g)$ | gas |
+| $(aq)$ | dissolved in water |`,
+    14,
+  ),
+  f(
+    'card-math-1',
+    'ch-math-1',
+    `State the ==chain rule== for $y = f(g(x))$.`,
+    `$$\\frac{dy}{dx} = f'(g(x)) \\cdot g'(x)$$
+
+Differentiate the **outside** function first (leaving the inside alone), then multiply by the derivative of the **inside**.`,
+    10,
+  ),
+  f(
+    'card-math-2',
+    'ch-math-1',
+    `What is $\\int x^n\\, dx$ (for $n \\neq -1$)?`,
+    `$$\\int x^n\\, dx = \\frac{x^{n+1}}{n+1} + C$$
+
+==Don't forget== the constant of integration $C$ — and the special case $\\int x^{-1} dx = \\ln|x| + C$.`,
+    9,
   ),
 ]

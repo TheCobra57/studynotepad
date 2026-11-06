@@ -26,6 +26,60 @@ function normalizeMathBlocks(src: string): string {
   )
 }
 
+// ---------------------------------------------------------------------------
+// ==labels== — inline highlights with a slightly darker background ("mark as
+// important"). Parsed as a tiny remark plugin: text nodes are split on
+// `==…==` spans and replaced with a custom node that mdast-util-to-hast
+// renders as <mark class="md-label"> via its data.hName/hProperties hooks.
+// Boundaries follow markdown-it-mark: content may not start/end with a space,
+// so "a == b" arithmetic never turns into a label.
+// ---------------------------------------------------------------------------
+
+/** minimal mdast node shape (we only split text nodes and grow parents) */
+interface MdNode {
+  type: string
+  value?: string
+  children?: MdNode[]
+  data?: { hName?: string; hProperties?: Record<string, unknown> }
+}
+
+const RE_LABEL = /==([^=\s\n](?:[^=\n]*[^=\s\n])?)==/g
+
+function remarkLabels() {
+  return (tree: MdNode) => {
+    const visit = (node: MdNode) => {
+      const children = node.children
+      if (!children) return
+      for (let i = 0; i < children.length; i++) {
+        visit(children[i])
+        const child = children[i]
+        if (child.type !== 'text' || !child.value || !child.value.includes('==')) continue
+        RE_LABEL.lastIndex = 0
+        if (!RE_LABEL.test(child.value)) continue
+        RE_LABEL.lastIndex = 0
+        const parts: MdNode[] = []
+        let last = 0
+        let m: RegExpExecArray | null
+        while ((m = RE_LABEL.exec(child.value))) {
+          if (m.index > last) parts.push({ type: 'text', value: child.value.slice(last, m.index) })
+          parts.push({
+            type: 'studypadLabel',
+            data: { hName: 'mark', hProperties: { className: 'md-label' } },
+            children: [{ type: 'text', value: m[1] }],
+          })
+          last = m.index + m[0].length
+        }
+        if (last < child.value.length) {
+          parts.push({ type: 'text', value: child.value.slice(last) })
+        }
+        children.splice(i, parts.length, ...parts)
+        i += parts.length - 1
+      }
+    }
+    visit(tree)
+  }
+}
+
 /**
  * react-markdown sanitises URLs by default and strips data: URLs — but our
  * images are stored as data: URLs. Allow images only (safe: no script
@@ -202,7 +256,7 @@ export function MarkdownPreview({
     <div className={cn('markdown-body', className)} style={style}>
       {prepend}
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
+        remarkPlugins={[remarkGfm, remarkMath, remarkLabels]}
         rehypePlugins={rehypePlugins}
         components={components}
         urlTransform={urlTransform}
@@ -223,7 +277,7 @@ export function InlineMarkdown({ text }: { text: string }) {
   return (
     <span className="block-inline">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
+        remarkPlugins={[remarkGfm, remarkMath, remarkLabels]}
         rehypePlugins={[
           [rehypeKatex, { strict: false, throwOnError: false, errorColor: '#e11d48' }],
         ]}

@@ -1094,6 +1094,11 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         wrapSelection('`', '`', 'code')
         return
       }
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault()
+        wrapSelection('==', '==', 'important term')
+        return
+      }
       if (mod && e.key === 'Enter') {
         e.preventDefault()
         if (block.type === 'todo') toggleTodo(block.id)

@@ -19,6 +19,7 @@ import {
   Quote,
   Radical,
   Table as TableIcon,
+  Tag,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -42,6 +43,7 @@ const ICONS: Record<CommandIcon, LucideIcon> = {
   clipboard: Clipboard,
   whiteboard: Brush,
   toc: ListTree,
+  label: Tag,
 }
 
 interface SlashMenuProps {

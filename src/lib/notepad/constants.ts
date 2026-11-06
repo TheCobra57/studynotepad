@@ -59,6 +59,7 @@ const MAX_SEGMENTS = 24
 /** strip inline markdown emphasis/links, collapse whitespace */
 function stripInlineMd(s: string): string {
   return s
+    .replace(/==([^=\n]+)==/g, '$1') // labels — keep the words, drop the marks
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/__([^_]+)__/g, '$1')
     .replace(/~~([^~]+)~~/g, '$1')

@@ -25,10 +25,25 @@ export interface Note {
   updatedAt: number
 }
 
+/** One side of a flashcard: markdown, same format as note content
+ *  (text, images, tables, $math$, ==labels==). */
+export type FlashcardSide = string
+
+export interface Flashcard {
+  id: string
+  chapterId: string
+  front: FlashcardSide
+  back: FlashcardSide
+  createdAt: number
+  updatedAt: number
+}
+
 export interface NotepadBackup {
   subjects: Subject[]
   chapters: Chapter[]
   notes: Note[]
+  /** absent in V2 backups and older — treated as an empty deck on import */
+  flashcards?: Flashcard[]
   exportedAt: string
   version: 1
 }
@@ -38,3 +53,9 @@ export type MobileView = 'tree' | 'notes' | 'editor'
 /** Editor focus modes — 'area' hides the app chrome (header/panes/footer),
  *  'fullscreen' additionally requests native browser fullscreen. */
 export type EditorFocusMode = 'off' | 'area' | 'fullscreen'
+
+/** Workspace tabs inside a chapter — notes or the chapter's flashcard deck */
+export type ChapterTab = 'notes' | 'flashcards'
+
+/** Flashcards workspace mode — build the deck or study it */
+export type FlashcardMode = 'make' | 'view'

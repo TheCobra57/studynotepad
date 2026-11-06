@@ -4,8 +4,16 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { browserStorage } from './idb-storage'
 import { STORAGE_KEY } from './constants'
-import { seedChapters, seedNotes, seedSubjects } from './seed'
-import type { Chapter, NotepadBackup, Note, Subject } from './types'
+import { seedChapters, seedFlashcards, seedNotes, seedSubjects } from './seed'
+import type {
+  Chapter,
+  ChapterTab,
+  Flashcard,
+  FlashcardMode,
+  NotepadBackup,
+  Note,
+  Subject,
+} from './types'
 
 function uid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -34,12 +42,15 @@ interface SelectionInput {
   subjects: Subject[]
   chapters: Chapter[]
   notes: Note[]
+  flashcards: Flashcard[]
   selectedChapterId: string | null
   selectedNoteId: string | null
+  /** which flashcard the workspace has open — session-ish, not persisted */
+  selectedCardId: string | null
 }
 
 function normalizeSelection(state: SelectionInput) {
-  const { chapters, notes, selectedChapterId, selectedNoteId } = state
+  const { chapters, notes, flashcards, selectedChapterId, selectedNoteId } = state
   let chapterId: string | null = selectedChapterId
   if (!chapterId || !chapters.some((c) => c.id === chapterId)) {
     chapterId = chapters.length ? chapters[0].id : null
@@ -49,7 +60,13 @@ function normalizeSelection(state: SelectionInput) {
   if (!noteId || !chapterNotes.some((n) => n.id === noteId)) {
     noteId = chapterNotes.length ? sortNotes(chapterNotes)[0].id : null
   }
-  return { selectedChapterId: chapterId, selectedNoteId: noteId }
+  // the open card follows the chapter: first card of the deck, or none
+  const deck = chapterId ? flashcards.filter((f) => f.chapterId === chapterId) : []
+  let cardId: string | null = state.selectedCardId
+  if (!cardId || !deck.some((f) => f.id === cardId)) {
+    cardId = deck.length ? deck[0].id : null
+  }
+  return { selectedChapterId: chapterId, selectedNoteId: noteId, selectedCardId: cardId }
 }
 
 export interface NotepadStore extends SelectionInput {
@@ -58,6 +75,14 @@ export interface NotepadStore extends SelectionInput {
   /** false until the persisted state (if any) has been read from IndexedDB */
   hasHydrated: boolean
   setHasHydrated: (v: boolean) => void
+
+  /** workspace tab of the selected chapter — session-only, not persisted */
+  chapterTab: ChapterTab
+  setChapterTab: (tab: ChapterTab) => void
+
+  /** flashcards workspace mode — session-only, not persisted */
+  flashcardMode: FlashcardMode
+  setFlashcardMode: (mode: FlashcardMode) => void
 
   addSubject: (name: string, color: string) => Subject
   renameSubject: (id: string, name: string, color?: string) => void
@@ -72,6 +97,14 @@ export interface NotepadStore extends SelectionInput {
   deleteNote: (id: string) => void
   togglePin: (id: string) => void
 
+  /** flashcards — a chapter's deck is the store array order (like chapters) */
+  addCard: (chapterId: string, front?: string, back?: string) => Flashcard
+  updateCard: (id: string, patch: Partial<Pick<Flashcard, 'front' | 'back'>>) => void
+  deleteCard: (id: string) => void
+  duplicateCard: (id: string) => Flashcard | undefined
+  moveCard: (chapterId: string, id: string, direction: -1 | 1) => void
+  selectCard: (id: string) => void
+
   selectChapter: (chapterId: string) => void
   selectNote: (id: string) => void
   setSearchQuery: (q: string) => void
@@ -80,6 +113,7 @@ export interface NotepadStore extends SelectionInput {
   reorderSubjects: (orderedIds: string[]) => void
   reorderChapters: (subjectId: string, orderedIds: string[]) => void
   reorderNotes: (chapterId: string, orderedIds: string[]) => void
+  reorderCards: (chapterId: string, orderedIds: string[]) => void
 
   importData: (backup: NotepadBackup) => void
   clearAll: () => void
@@ -89,11 +123,13 @@ const seedState = {
   subjects: seedSubjects,
   chapters: seedChapters,
   notes: seedNotes,
+  flashcards: seedFlashcards,
 }
 const seedSelection = normalizeSelection({
   ...seedState,
   selectedChapterId: seedChapters[0].id,
   selectedNoteId: seedNotes[0].id,
+  selectedCardId: seedFlashcards[0]?.id ?? null,
 })
 
 export const useNotepadStore = create<NotepadStore>()(
@@ -104,6 +140,12 @@ export const useNotepadStore = create<NotepadStore>()(
       searchQuery: '',
       hasHydrated: false,
       setHasHydrated: (v) => set({ hasHydrated: v }),
+
+      chapterTab: 'notes',
+      setChapterTab: (tab) => set({ chapterTab: tab }),
+
+      flashcardMode: 'make',
+      setFlashcardMode: (mode) => set({ flashcardMode: mode }),
 
       addSubject: (name, color) => {
         const subject: Subject = { id: uid(), name: name.trim(), color, createdAt: Date.now() }
@@ -126,7 +168,14 @@ export const useNotepadStore = create<NotepadStore>()(
           const subjects = s.subjects.filter((x) => x.id !== id)
           const chapters = s.chapters.filter((c) => c.subjectId !== id)
           const notes = s.notes.filter((n) => !chapterIds.has(n.chapterId))
-          return { subjects, chapters, notes, ...normalizeSelection({ ...s, subjects, chapters, notes }) }
+          const flashcards = s.flashcards.filter((f) => !chapterIds.has(f.chapterId))
+          return {
+            subjects,
+            chapters,
+            notes,
+            flashcards,
+            ...normalizeSelection({ ...s, subjects, chapters, notes, flashcards }),
+          }
         }),
 
       addChapter: (subjectId, name) => {
@@ -148,7 +197,110 @@ export const useNotepadStore = create<NotepadStore>()(
         set((s) => {
           const chapters = s.chapters.filter((c) => c.id !== id)
           const notes = s.notes.filter((n) => n.chapterId !== id)
-          return { chapters, notes, ...normalizeSelection({ ...s, subjects: s.subjects, chapters, notes, selectedChapterId: s.selectedChapterId, selectedNoteId: s.selectedNoteId }) }
+          const flashcards = s.flashcards.filter((f) => f.chapterId !== id)
+          return {
+            chapters,
+            notes,
+            flashcards,
+            ...normalizeSelection({
+              ...s,
+              subjects: s.subjects,
+              chapters,
+              notes,
+              flashcards,
+              selectedChapterId: s.selectedChapterId,
+              selectedNoteId: s.selectedNoteId,
+            }),
+          }
+        }),
+
+      // ---------- flashcards ----------
+
+      addCard: (chapterId, front = '', back = '') => {
+        let created: Flashcard | undefined
+        set((s) => {
+          const card: Flashcard = {
+            id: uid(),
+            chapterId,
+            front,
+            back,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          }
+          created = card
+          return {
+            flashcards: [...s.flashcards, card],
+            selectedChapterId: chapterId,
+            selectedCardId: card.id,
+          }
+        })
+        return created as Flashcard
+      },
+
+      updateCard: (id, patch) =>
+        set((s) => ({
+          flashcards: s.flashcards.map((f) => {
+            if (f.id !== id) return f
+            const changed =
+              (patch.front !== undefined && patch.front !== f.front) ||
+              (patch.back !== undefined && patch.back !== f.back)
+            return changed ? { ...f, ...patch, updatedAt: Date.now() } : f
+          }),
+        })),
+
+      deleteCard: (id) =>
+        set((s) => {
+          const flashcards = s.flashcards.filter((f) => f.id !== id)
+          if (s.selectedCardId === id) {
+            const remaining = flashcards.filter((f) => f.chapterId === s.selectedChapterId)
+            return { flashcards, selectedCardId: remaining.length ? remaining[0].id : null }
+          }
+          return { flashcards }
+        }),
+
+      duplicateCard: (id) => {
+        let created: Flashcard | undefined
+        set((s) => {
+          const src = s.flashcards.find((f) => f.id === id)
+          if (!src) return s
+          const copy: Flashcard = {
+            ...src,
+            id: uid(),
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          }
+          created = copy
+          const idx = s.flashcards.findIndex((f) => f.id === id)
+          const flashcards = [...s.flashcards]
+          flashcards.splice(idx + 1, 0, copy)
+          return { flashcards, selectedCardId: copy.id }
+        })
+        return created
+      },
+
+      moveCard: (chapterId, id, direction) =>
+        set((s) => {
+          const deck = s.flashcards.filter((f) => f.chapterId === chapterId)
+          const idx = deck.findIndex((f) => f.id === id)
+          const to = idx + direction
+          if (idx === -1 || to < 0 || to >= deck.length) return s
+          const next = [...deck]
+          const [moved] = next.splice(idx, 1)
+          next.splice(to, 0, moved)
+          const byId = new Map(next.map((f) => [f.id, f] as const))
+          let k = 0
+          return {
+            flashcards: s.flashcards.map((f) =>
+              f.chapterId === chapterId ? (byId.get(f.id) as Flashcard) : f,
+            ),
+          }
+        }),
+
+      selectCard: (id) =>
+        set((s) => {
+          const card = s.flashcards.find((f) => f.id === id)
+          if (!card) return s
+          return { selectedCardId: id, selectedChapterId: card.chapterId }
         }),
 
       addNote: (chapterId, title = 'Untitled note') => {
@@ -207,9 +359,11 @@ export const useNotepadStore = create<NotepadStore>()(
         set((s) => {
           if (s.selectedChapterId === chapterId) return s
           const chapterNotes = sortNotes(s.notes.filter((n) => n.chapterId === chapterId))
+          const deck = s.flashcards.filter((f) => f.chapterId === chapterId)
           return {
             selectedChapterId: chapterId,
             selectedNoteId: chapterNotes.length ? chapterNotes[0].id : null,
+            selectedCardId: deck.length ? deck[0].id : null,
           }
         }),
 
@@ -253,6 +407,22 @@ export const useNotepadStore = create<NotepadStore>()(
           }
         }),
 
+      /** apply a new order to a chapter's deck (ids must be a permutation) */
+      reorderCards: (chapterId, orderedIds) =>
+        set((s) => {
+          const current = s.flashcards.filter((f) => f.chapterId === chapterId)
+          if (orderedIds.length !== current.length) return s
+          const idSet = new Set(orderedIds)
+          if (!current.every((n) => idSet.has(n.id))) return s
+          const byId = new Map(current.map((f) => [f.id, f] as const))
+          let k = 0
+          return {
+            flashcards: s.flashcards.map((f) =>
+              f.chapterId === chapterId ? (byId.get(orderedIds[k++]) as Flashcard) : f,
+            ),
+          }
+        }),
+
       selectNote: (id) =>
         set((s) => {
           const note = s.notes.find((n) => n.id === id)
@@ -267,12 +437,14 @@ export const useNotepadStore = create<NotepadStore>()(
           const subjects = backup.subjects ?? []
           const chapters = backup.chapters ?? []
           const notes = backup.notes ?? []
+          const flashcards = backup.flashcards ?? []
           return {
             subjects,
             chapters,
             notes,
+            flashcards,
             searchQuery: '',
-            ...normalizeSelection({ ...s, subjects, chapters, notes }),
+            ...normalizeSelection({ ...s, subjects, chapters, notes, flashcards }),
           }
         }),
 
@@ -281,15 +453,20 @@ export const useNotepadStore = create<NotepadStore>()(
           subjects: [],
           chapters: [],
           notes: [],
+          flashcards: [],
           selectedChapterId: null,
           selectedNoteId: null,
+          selectedCardId: null,
           searchQuery: '',
         }),
     }),
     {
       name: STORAGE_KEY,
-      version: 1,
+      version: 2,
       storage: createJSONStorage(browserStorage),
+      // V1 → V2: flashcards didn't exist yet — start every returning user
+      // with an empty deck (fresh installs get the seeded demo deck instead)
+      migrate: (persisted) => ({ ...(persisted as object), flashcards: [] }),
       // flips hasHydrated once the (async) IndexedDB read finishes; during
       // SSR the no-op storage resolves immediately with no data, which is
       // fine — the UI splash gate covers it
@@ -301,6 +478,7 @@ export const useNotepadStore = create<NotepadStore>()(
         subjects: s.subjects,
         chapters: s.chapters,
         notes: s.notes,
+        flashcards: s.flashcards,
         selectedChapterId: s.selectedChapterId,
         selectedNoteId: s.selectedNoteId,
       }),
@@ -315,3 +493,10 @@ export const useSelectedChapter = () =>
 
 export const useSelectedNote = () =>
   useNotepadStore((s) => s.notes.find((n) => n.id === s.selectedNoteId) ?? null)
+
+export const useSelectedCard = () =>
+  useNotepadStore((s) => s.flashcards.find((f) => f.id === s.selectedCardId) ?? null)
+
+/** a chapter's deck, in deck order (the store array order) */
+export const chapterDeck = (flashcards: Flashcard[], chapterId: string | null): Flashcard[] =>
+  chapterId ? flashcards.filter((f) => f.chapterId === chapterId) : []
