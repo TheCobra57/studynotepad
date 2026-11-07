@@ -1,9 +1,11 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
-import { Copy, PencilLine, Trash2 } from 'lucide-react'
+import { ArrowLeft, Copy, List, PencilLine, Plus, Table, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
+import { useIsDesktop } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
 import { Latex } from '@/components/notepad/markdown-preview'
 import {
@@ -16,11 +18,9 @@ import {
   removeToken,
   tokensToLatex,
   updateToken,
-  type ArrowToken,
-  type ElementToken,
   type FormulaToken,
-  type TextToken,
 } from '@/lib/notepad/formula/tokens'
+import { ElementList } from './element-list'
 import { PeriodicTable } from './periodic-table'
 import { TokenView } from './workspace-token'
 import type { TokenPatch } from '@/lib/notepad/formula/tokens'
@@ -31,6 +31,8 @@ interface ChemistryEditorProps {
   /** present when opened from the note editor — inserts the LaTeX into the note */
   onInsert?: (latex: string) => void
 }
+
+type ElementTab = 'table' | 'list'
 
 /** one preliminary symbol button in the right-top pane */
 function PrelimButton({
@@ -57,6 +59,9 @@ function PrelimButton({
 
 export function ChemistryEditor({ tokens, onTokensChange, onInsert }: ChemistryEditorProps) {
   const { toast } = useToast()
+  const isDesktop = useIsDesktop()
+  const [insertOpen, setInsertOpen] = useState(false)
+  const [elementTab, setElementTab] = useState<ElementTab>('table')
   const [autoFocusId, setAutoFocusId] = useState<string | null>(null)
   const trailingRef = useRef<HTMLInputElement>(null)
 
@@ -74,6 +79,8 @@ export function ChemistryEditor({ tokens, onTokensChange, onInsert }: ChemistryE
     append(token)
     if (withCondition) setAutoFocusId(token.id)
   }
+
+  const pickElement = (symbol: string) => append(makeElementToken(symbol))
 
   // the trailing input is uncontrolled so Enter keeps focus for the next word
   const commitTrailing = () => {
@@ -102,9 +109,30 @@ export function ChemistryEditor({ tokens, onTokensChange, onInsert }: ChemistryE
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4 lg:flex-row lg:overflow-hidden">
+    <div
+      className={cn(
+        'flex min-h-0 flex-1 flex-col gap-3 p-4 lg:flex-row',
+        isDesktop || insertOpen ? 'overflow-hidden' : 'overflow-y-auto',
+      )}
+    >
       {/* ---------- left pane: workspace + generated LaTeX ---------- */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+      <div
+        className={cn(
+          'flex min-h-0 min-w-0 flex-1 flex-col gap-3',
+          !isDesktop && insertOpen && 'hidden',
+        )}
+      >
+        {/* mobile-only: swaps this view for the element/insert pane */}
+        {!isDesktop && (
+          <Button
+            className="h-10 shrink-0 gap-2 text-sm font-semibold"
+            onClick={() => setInsertOpen(true)}
+          >
+            <Plus className="h-4 w-4" />
+            Insert element
+          </Button>
+        )}
+
         <div className="flex min-h-[200px] flex-1 flex-col overflow-hidden rounded-xl border bg-card">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -208,7 +236,35 @@ export function ChemistryEditor({ tokens, onTokensChange, onInsert }: ChemistryE
       </div>
 
       {/* ---------- right pane: preliminaries + elements ---------- */}
-      <div className="flex w-full shrink-0 flex-col gap-3 lg:w-[600px] xl:w-[640px]">
+      <div
+        className={cn(
+          'flex min-h-0 w-full flex-1 flex-col gap-3 lg:w-[600px] lg:flex-none xl:w-[640px]',
+          !isDesktop && !insertOpen && 'hidden',
+        )}
+      >
+        {/* mobile-only: back to the workspace view + compact live preview */}
+        {!isDesktop && (
+          <Button
+            variant="outline"
+            className="h-10 shrink-0 gap-2 text-sm font-semibold"
+            onClick={() => setInsertOpen(false)}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to workspace
+          </Button>
+        )}
+        {!isDesktop && (
+          <div className="flex h-10 shrink-0 items-center overflow-x-auto rounded-lg border bg-muted/40 px-3">
+            {latex ? (
+              <Latex tex={latex} />
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Nothing yet — pick elements below
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="shrink-0 rounded-xl border bg-card p-3">
           <p className="mb-2 text-xs font-medium text-muted-foreground">Preliminaries</p>
           <div className="flex flex-wrap gap-2">
@@ -237,12 +293,33 @@ export function ChemistryEditor({ tokens, onTokensChange, onInsert }: ChemistryE
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
-          <p className="shrink-0 border-b px-3 py-2 text-xs font-medium text-muted-foreground">
-            Elements — all 108, click to insert
-          </p>
-          <div className="min-h-0 flex-1 overflow-auto p-3">
-            <PeriodicTable onPick={(symbol) => append(makeElementToken(symbol))} />
-          </div>
+          <Tabs
+            value={elementTab}
+            onValueChange={(value) => setElementTab(value as ElementTab)}
+            className="flex min-h-0 flex-1 flex-col gap-0"
+          >
+            <div className="shrink-0 border-b px-2 py-2">
+              <TabsList className="grid h-9 w-full grid-cols-2">
+                <TabsTrigger value="table" className="gap-1.5">
+                  <Table className="h-3.5 w-3.5" />
+                  Periodic Table
+                </TabsTrigger>
+                <TabsTrigger value="list" className="gap-1.5">
+                  <List className="h-3.5 w-3.5" />
+                  List
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="table" className="mt-0 min-h-0 flex-1 overflow-auto p-3">
+              <PeriodicTable onPick={pickElement} />
+            </TabsContent>
+            <TabsContent
+              value="list"
+              className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
+              <ElementList onPick={pickElement} />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>

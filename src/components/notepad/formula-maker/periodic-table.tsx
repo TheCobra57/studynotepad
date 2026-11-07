@@ -30,8 +30,9 @@ function ElementTile({ el, onPick }: { el: ChemElement; onPick: (symbol: string)
  * element into the workspace.
  */
 export function PeriodicTable({ onPick }: { onPick: (symbol: string) => void }) {
+  // on mobile the grid flows fluid (~18px tiles); desktop keeps a roomy min-width
   return (
-    <div className="min-w-[540px]">
+    <div className="lg:min-w-[540px]">
       {/* category legend */}
       <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1" aria-hidden="true">
         {(Object.keys(CATEGORY_META) as (keyof typeof CATEGORY_META)[]).map((cat) => (

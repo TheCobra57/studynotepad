@@ -34,12 +34,13 @@ export function FormulaMakerDialog({ open, onOpenChange, onInsert }: FormulaMake
       >
         <Tabs defaultValue="chemistry" className="min-h-0 flex-1 gap-0">
           <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2.5 pr-14">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+            {/* header icon hidden on phones — every pixel goes to the title and tabs */}
+            <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 sm:flex dark:bg-amber-950 dark:text-amber-300">
               <FlaskConical className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <DialogTitle className="text-sm font-bold leading-tight">Formula maker</DialogTitle>
-              <DialogDescription className="text-[11px] leading-tight">
+              <DialogTitle className="truncate text-sm font-bold leading-tight">Formula maker</DialogTitle>
+              <DialogDescription className="hidden text-[11px] leading-tight sm:block">
                 Build the equation visually — the LaTeX types itself.
               </DialogDescription>
             </div>
