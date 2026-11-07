@@ -11,7 +11,8 @@
  *  3. Build the conservation matrix (rows = elements, columns = terms,
  *     reactants positive / products negative) and find its nullspace with
  *     exact rational Gauss-Jordan elimination — no floats, so results are
- *     always exact.
+ *     always exact. Under-determined equations (e.g. an accidental extra
+ *     `+` split) search positive combinations of the nullspace basis.
  *  4. Scale the solution to the smallest positive integers (LCM of
  *     denominators, then divide by the GCD).
  *  5. Write each coefficient back: a leading all-digits text chip is
@@ -190,31 +191,72 @@ function solveSmallestPositive(matrix: Frac[][], cols: number): number[] | null 
   for (let c = 0; c < cols; c++) if (!pivotCols.includes(c)) freeCols.push(c)
   if (!freeCols.length) return null // rank = cols → only the trivial solution
 
-  // set the last free variable to 1, the rest to 0, then back-substitute:
-  // in RREF each pivot row reads x[pivot] + Σ free·x[free] = 0
-  const x: Frac[] = Array.from({ length: cols }, () => new Frac(0))
-  x[freeCols[freeCols.length - 1]] = new Frac(1)
-  pivotCols.forEach((p, i) => {
-    let s = new Frac(0)
-    for (const f of freeCols) {
-      if (!work[i][f].isZero() && !x[f].isZero()) s = s.add(work[i][f].mul(x[f]))
-    }
-    x[p] = s.neg()
+  // One nullspace basis vector per free column: set that free variable to 1,
+  // the other free variables to 0, then read each pivot variable off its RREF
+  // row (each pivot row reads x[pivot] + Σ free·x[free] = 0). Every vector is
+  // scaled to whole numbers and oriented so its first nonzero entry is +.
+  const basis = freeCols.map((free) => {
+    const x: Frac[] = Array.from({ length: cols }, () => new Frac(0))
+    x[free] = new Frac(1)
+    pivotCols.forEach((p, i) => {
+      let s = new Frac(0)
+      for (const f of freeCols) {
+        if (!work[i][f].isZero() && !x[f].isZero()) s = s.add(work[i][f].mul(x[f]))
+      }
+      x[p] = s.neg()
+    })
+    let multiple = 1
+    for (const v of x) multiple = lcm(multiple, v.den)
+    const ints = x.map((v) => (v.num * multiple) / v.den)
+    const first = ints.find((v) => v !== 0) ?? 0
+    return first < 0 ? ints.map((v) => -v) : ints
   })
 
-  // orient the solution positive (a real reaction has all coefficients > 0;
-  // mixed-sign results are rejected by the caller's positivity check)
-  const sign = x.find((v) => !v.isZero())!.num < 0 ? -1 : 1
+  // A single basis vector is the whole solution line. With several free
+  // variables the equation is under-determined (e.g. an accidental extra “+”
+  // split), and the plain basis vectors can contain zeros — search small
+  // positive weight combinations so a strictly positive solution is found
+  // whenever one exists.
+  let candidate: number[]
+  if (basis.length === 1) {
+    candidate = basis[0]
+  } else {
+    const maxWeight = basis.length <= 2 ? 8 : basis.length === 3 ? 6 : 4
+    const weights = new Array(basis.length).fill(1)
+    let best: number[] | null = null
+    let bestScore = Infinity
+    for (;;) {
+      const combo = new Array(cols).fill(0)
+      for (let i = 0; i < basis.length; i++) {
+        for (let j = 0; j < cols; j++) combo[j] += weights[i] * basis[i][j]
+      }
+      if (combo.every((v) => v > 0)) {
+        const score = combo.reduce((a, b) => a + b, 0)
+        if (score < bestScore) {
+          bestScore = score
+          best = combo
+        }
+      }
+      // odometer-style increment over the weight vector
+      let d = 0
+      while (d < basis.length) {
+        weights[d] += 1
+        if (weights[d] <= maxWeight) break
+        weights[d] = 1
+        d += 1
+      }
+      if (d >= basis.length) break
+    }
+    if (!best) return null // no strictly positive combination exists at all
+    candidate = best
+  }
 
-  // scale to smallest integers
-  let multiple = 1
-  for (const v of x) multiple = lcm(multiple, v.den)
-  let ints = x.map((v) => (v.num * sign * multiple) / v.den)
+  // scale to the smallest integers
   let divisor = 0
-  for (const v of ints) divisor = gcd(divisor, Math.abs(v))
-  if (divisor > 1) ints = ints.map((v) => v / divisor)
+  for (const v of candidate) divisor = gcd(divisor, Math.abs(v))
+  if (divisor > 1) candidate = candidate.map((v) => v / divisor)
 
-  return ints
+  return candidate
 }
 
 // ---------------------------------------------------------------------------
