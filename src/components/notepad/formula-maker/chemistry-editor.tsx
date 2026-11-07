@@ -21,9 +21,11 @@ import {
   type FormulaToken,
 } from '@/lib/notepad/formula/tokens'
 import { ElementList } from './element-list'
+import { PickElementDialog } from './pick-element-dialog'
 import { PeriodicTable } from './periodic-table'
 import { TokenView } from './workspace-token'
 import type { TokenPatch } from '@/lib/notepad/formula/tokens'
+import { ELEMENTS, type ChemElement } from '@/lib/notepad/formula/elements'
 
 interface ChemistryEditorProps {
   tokens: FormulaToken[]
@@ -64,6 +66,8 @@ export function ChemistryEditor({ tokens, onTokensChange, onInsert }: ChemistryE
   const [elementTab, setElementTab] = useState<ElementTab>('table')
   const [autoFocusId, setAutoFocusId] = useState<string | null>(null)
   const trailingRef = useRef<HTMLInputElement>(null)
+  /** element awaiting its optional n/q fields in the pick dialog */
+  const [pickedElement, setPickedElement] = useState<ChemElement | null>(null)
 
   const latex = useMemo(() => tokensToLatex(tokens), [tokens])
 
@@ -80,7 +84,10 @@ export function ChemistryEditor({ tokens, onTokensChange, onInsert }: ChemistryE
     if (withCondition) setAutoFocusId(token.id)
   }
 
-  const pickElement = (symbol: string) => append(makeElementToken(symbol))
+  // tapping a tile / list row opens the small n/q form instead of inserting
+  // straight away — the tiny dashed placeholders are hard to hit on phones
+  const pickElement = (symbol: string) =>
+    setPickedElement(ELEMENTS.find((el) => el.symbol === symbol) ?? null)
 
   // the trailing input is uncontrolled so Enter keeps focus for the next word
   const commitTrailing = () => {
@@ -322,6 +329,13 @@ export function ChemistryEditor({ tokens, onTokensChange, onInsert }: ChemistryE
           </Tabs>
         </div>
       </div>
+
+      {/* small n/q form shown when an element is tapped */}
+      <PickElementDialog
+        element={pickedElement}
+        onClose={() => setPickedElement(null)}
+        onConfirm={(symbol, count, charge) => append(makeElementToken(symbol, count, charge))}
+      />
     </div>
   )
 }

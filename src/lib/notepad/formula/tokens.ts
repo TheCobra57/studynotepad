@@ -70,8 +70,8 @@ export function newTokenId(): string {
 // token factories
 // ---------------------------------------------------------------------------
 
-export function makeElementToken(symbol: string): ElementToken {
-  return { id: newTokenId(), kind: 'element', symbol, count: '', charge: '' }
+export function makeElementToken(symbol: string, count = '', charge = ''): ElementToken {
+  return { id: newTokenId(), kind: 'element', symbol, count, charge }
 }
 
 export function makePlusToken(): PlusToken {
