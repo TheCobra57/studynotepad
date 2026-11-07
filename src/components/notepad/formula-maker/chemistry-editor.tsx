@@ -1,12 +1,13 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Copy, List, PencilLine, Plus, Table, Trash2 } from 'lucide-react'
+import { ArrowLeft, Copy, List, PencilLine, Plus, Scale, Table, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { useIsDesktop } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
+import { balanceTokens } from '@/lib/notepad/formula/balance'
 import { Latex } from '@/components/notepad/markdown-preview'
 import {
   makeArrowToken,
@@ -89,6 +90,24 @@ export function ChemistryEditor({ tokens, onTokensChange, onInsert }: ChemistryE
   const pickElement = (symbol: string) =>
     setPickedElement(ELEMENTS.find((el) => el.symbol === symbol) ?? null)
 
+  // compute smallest whole-number coefficients for the current workspace
+  const autoBalance = () => {
+    const result = balanceTokens(tokens)
+    if (!result.ok) {
+      toast({
+        title: 'Cannot balance this equation',
+        description: result.error,
+        variant: 'destructive',
+      })
+      return
+    }
+    onTokensChange(result.tokens)
+    toast({
+      title: 'Equation balanced',
+      description: 'Smallest whole-number coefficients were applied to every term.',
+    })
+  }
+
   // the trailing input is uncontrolled so Enter keeps focus for the next word
   const commitTrailing = () => {
     const input = trailingRef.current
@@ -142,20 +161,34 @@ export function ChemistryEditor({ tokens, onTokensChange, onInsert }: ChemistryE
 
         <div className="flex min-h-[200px] flex-1 flex-col overflow-hidden rounded-xl border bg-card">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <PencilLine className="h-3.5 w-3.5" />
-              Workspace — click a placeholder to type its value
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <PencilLine className="h-3.5 w-3.5 shrink-0" />
+              Workspace
+              <span className="hidden lg:inline">— click a placeholder to type its value</span>
             </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
-              disabled={!tokens.length}
-              onClick={() => onTokensChange([])}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Clear
-            </Button>
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs"
+                title="Balance the equation with the smallest whole-number coefficients"
+                disabled={!tokens.length}
+                onClick={autoBalance}
+              >
+                <Scale className="h-3.5 w-3.5" />
+                Auto balance
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
+                disabled={!tokens.length}
+                onClick={() => onTokensChange([])}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Clear
+              </Button>
+            </div>
           </div>
 
           <div
