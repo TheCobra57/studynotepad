@@ -36,6 +36,7 @@ import {
   Quote,
   RectangleHorizontal,
   Sigma,
+  Sparkles,
   Table,
   Tag,
   Trash2,
@@ -69,6 +70,7 @@ import { autoResize } from '@/lib/notepad/blocks'
 import { FORMULA_TEMPLATES, unwrapTemplate, type ImageAction } from './snippets'
 import { Latex } from './markdown-preview'
 import { Whiteboard } from './whiteboard'
+import { FormulaMakerDialog } from './formula-maker/formula-maker-dialog'
 import { LARGE_IMAGE_BYTES, formatBytes, processImageFile } from '@/lib/notepad/image'
 
 interface EditorPaneProps {
@@ -118,6 +120,7 @@ export function EditorPane({
   const [whiteboardOpen, setWhiteboardOpen] = useState(false)
   const [whiteboardInitial, setWhiteboardInitial] = useState<string | null>(null)
   const [annotateTargetId, setAnnotateTargetId] = useState<string | null>(null)
+  const [formulaMakerOpen, setFormulaMakerOpen] = useState(false)
 
   // grow the title to fit — long titles wrap to more lines instead of
   // scrolling sideways and disappearing
@@ -191,6 +194,17 @@ export function EditorPane({
     const { tex, isBlock } = unwrapTemplate(insert)
     if (isBlock) editorRef.current?.insertMathBlock(tex)
     else editorRef.current?.insertInlineOrBlock(tex)
+  }
+
+  // ---------- formula maker: visual equation builder ----------
+
+  const handleFormulaMakerInsert = (latex: string) => {
+    insertTemplate(`$$\n${latex}\n$$\n`)
+    setFormulaMakerOpen(false)
+    toast({
+      title: 'Formula inserted',
+      description: 'Your equation was added to the note as a LaTeX block.',
+    })
   }
 
   // ---------- image flows: upload / clipboard / whiteboard ----------
@@ -653,6 +667,15 @@ export function EditorPane({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-[340px]">
+                <DropdownMenuItem
+                  onClick={() => setFormulaMakerOpen(true)}
+                  className="gap-2"
+                >
+                  <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <span className="flex-1 font-medium">Formula maker…</span>
+                  <span className="text-[10px] text-muted-foreground">visual</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuLabel className="flex items-center gap-1.5 text-xs">
                   <FlaskConical className="h-3.5 w-3.5" /> Chemistry
                 </DropdownMenuLabel>
@@ -795,6 +818,13 @@ export function EditorPane({
           Updated {formatDistanceToNow(new Date(note.updatedAt), { addSuffix: true })}
         </span>
       </div>
+
+      {/* Formula maker — full-screen visual equation builder */}
+      <FormulaMakerDialog
+        open={formulaMakerOpen}
+        onOpenChange={setFormulaMakerOpen}
+        onInsert={handleFormulaMakerInsert}
+      />
 
       {/* Whiteboard — draw & insert (also used to annotate images) */}
       <Whiteboard
