@@ -275,10 +275,10 @@ export function MathKeyboard({ onKey, onUndo, onRedo, onCopy, canUndo, canRedo, 
   return (
     <section
       aria-label="Math keyboard"
-      className="shrink-0 rounded-xl border bg-card p-2 sm:p-3"
+      className="shrink-0 rounded-xl border bg-card p-2 sm:p-3 lg:flex lg:min-h-[180px] lg:shrink lg:flex-col lg:overflow-hidden xl:w-[800px] xl:flex-none"
     >
-      {/* top bar: keyboard tabs + undo / redo / copy */}
-      <div className="mb-2 flex items-center gap-2">
+      {/* top bar: keyboard tabs + undo / redo / copy (stays visible while key zones scroll) */}
+      <div className="mb-2 flex shrink-0 items-center gap-2">
         <div className="flex gap-1 rounded-lg bg-muted p-0.5" role="tablist" aria-label="Keyboard layout">
           {TABS.map((t) => (
             <button
@@ -337,8 +337,10 @@ export function MathKeyboard({ onKey, onUndo, onRedo, onCopy, canUndo, canRedo, 
         </div>
       </div>
 
-      {/* three zones — stacked & centred on phones, one row on desktop */}
-      <div className="flex flex-col items-center gap-2 lg:flex-row lg:items-start lg:justify-center">
+      {/* three zones — stacked & centred on phones, one row on desktop;
+          on short screens this zone area scrolls internally so the
+          workspace above never has to move */}
+      <div className="flex flex-col items-center gap-2 lg:min-h-0 lg:flex-1 lg:flex-row lg:items-start lg:justify-center lg:overflow-y-auto">
         {/* tab zone */}
         <div role="tabpanel" aria-label={TABS.find((t) => t.value === tab)?.aria}>
           <div className={cn('grid gap-1 sm:gap-1.5', tabCols)}>{tabGrid}</div>

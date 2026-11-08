@@ -144,80 +144,86 @@ export function MathEditor({ tokens, onTokensChange, onInsert }: MathEditorProps
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
-      {/* ---------- workspace ---------- */}
-      <div className="flex min-h-[160px] shrink-0 flex-col overflow-hidden rounded-xl border bg-card lg:flex-1">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
-          <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <PencilLine className="h-3.5 w-3.5 shrink-0" />
-            Workspace
-            <span className="hidden lg:inline">— click a slot to place the cursor, then tap the keys below</span>
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
-            disabled={!tokens.length}
-            onClick={clear}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Clear
-          </Button>
-        </div>
-
-        <div
-          className="flex flex-1 flex-wrap content-start items-center gap-1.5 overflow-y-auto p-3"
-          onClick={() => setCursor({ containerId: ROOT_ID, index: tokens.length })}
-        >
-          <MathWorkspaceContent tokens={tokens} cursor={cursor} onSetCursor={setCursor} />
-          {!tokens.length && (
-            <p className="w-full pt-6 text-center text-xs text-muted-foreground/70">
-              Build formulas with the math keyboard below — fractions, roots, powers, integrals and
-              absolute values hold their own slots. No typing needed: the OS keyboard never appears.
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* ---------- generated LaTeX — rendered preview + raw string ---------- */}
-      <div className="shrink-0 rounded-xl border bg-card p-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium text-muted-foreground">LaTeX — generated automatically</span>
-          <div className="flex gap-1.5">
+    // PC: no page scrolling — on wide screens the workspace panel sits LEFT of
+    // the keyboard (chemistry-tab style), on narrower ones the keyboard scrolls
+    // internally instead, so the canvas never disappears while typing
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4 xl:flex-row">
+      {/* workspace + preview panel */}
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-1">
+        {/* ---------- workspace (sticks to the top on narrower desktops) ---------- */}
+        <div className="flex min-h-[160px] shrink-0 flex-col overflow-hidden rounded-xl border bg-card lg:sticky lg:top-0 lg:z-10 lg:flex-1">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <PencilLine className="h-3.5 w-3.5 shrink-0" />
+              Workspace
+              <span className="hidden lg:inline">— click a slot to place the cursor, then tap keys on the math keyboard</span>
+            </span>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="h-7 gap-1 px-2.5 text-xs"
-              disabled={!latex}
-              onClick={copyLatex}
+              className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
+              disabled={!tokens.length}
+              onClick={clear}
             >
-              <Copy className="h-3.5 w-3.5" />
-              Copy
+              <Trash2 className="h-3.5 w-3.5" />
+              Clear
             </Button>
-            {onInsert && (
-              <Button
-                size="sm"
-                className="h-7 gap-1 px-2.5 text-xs"
-                disabled={!latex}
-                onClick={() => onInsert(latex)}
-              >
-                Insert into note
-              </Button>
+          </div>
+
+          <div
+            className="flex flex-1 flex-wrap content-start items-center gap-1.5 overflow-y-auto p-3"
+            onClick={() => setCursor({ containerId: ROOT_ID, index: tokens.length })}
+          >
+            <MathWorkspaceContent tokens={tokens} cursor={cursor} onSetCursor={setCursor} />
+            {!tokens.length && (
+              <p className="w-full pt-6 text-center text-xs text-muted-foreground/70">
+                Build formulas with the math keyboard — fractions, roots, powers, integrals and
+                absolute values hold their own slots. No typing needed: the OS keyboard never appears.
+              </p>
             )}
           </div>
         </div>
-        <div className="mt-2 flex min-h-[68px] items-center justify-center overflow-x-auto rounded-lg bg-muted/40 px-3 py-3">
-          {latex ? (
-            <Latex tex={latex} display />
-          ) : (
-            <span className="text-xs text-muted-foreground">
-              Your formula appears here as you build it
-            </span>
-          )}
+
+        {/* ---------- generated LaTeX — rendered preview + raw string ---------- */}
+        <div className="shrink-0 rounded-xl border bg-card p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-muted-foreground">LaTeX — generated automatically</span>
+            <div className="flex gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 px-2.5 text-xs"
+                disabled={!latex}
+                onClick={copyLatex}
+              >
+                <Copy className="h-3.5 w-3.5" />
+                Copy
+              </Button>
+              {onInsert && (
+                <Button
+                  size="sm"
+                  className="h-7 gap-1 px-2.5 text-xs"
+                  disabled={!latex}
+                  onClick={() => onInsert(latex)}
+                >
+                  Insert into note
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="mt-2 flex min-h-[68px] items-center justify-center overflow-x-auto rounded-lg bg-muted/40 px-3 py-3">
+            {latex ? (
+              <Latex tex={latex} display />
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Your formula appears here as you build it
+              </span>
+            )}
+          </div>
+          <code className="mt-2 block max-h-16 overflow-auto rounded bg-muted/60 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-muted-foreground">
+            {latex || '\u00A0'}
+          </code>
         </div>
-        <code className="mt-2 block max-h-16 overflow-auto rounded bg-muted/60 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-muted-foreground">
-          {latex || '\u00A0'}
-        </code>
       </div>
 
       {/* ---------- the on-screen math keyboard (only input method) ---------- */}
