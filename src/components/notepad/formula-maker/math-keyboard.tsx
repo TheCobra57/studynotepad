@@ -46,7 +46,7 @@ const TABS: { value: KeyboardTab; label: string; aria: string }[] = [
 
 /** shared visual shell of every key */
 const KEY =
-  'flex h-9 w-9 cursor-pointer select-none items-center justify-center rounded-lg border bg-background text-sm font-medium leading-none text-foreground shadow-xs transition-[transform,background-color] hover:bg-accent active:scale-[0.94] sm:h-11 sm:w-11 sm:text-base'
+  'flex h-9 w-9 cursor-pointer select-none items-center justify-center rounded-lg border bg-background text-sm font-medium leading-none text-foreground shadow-xs transition-[transform,background-color] hover:bg-accent active:scale-[0.94] sm:h-10 sm:w-10 sm:text-base xl:h-11 xl:w-11'
 
 function Key({
   label,
@@ -275,7 +275,7 @@ export function MathKeyboard({ onKey, onUndo, onRedo, onCopy, canUndo, canRedo, 
   return (
     <section
       aria-label="Math keyboard"
-      className="shrink-0 rounded-xl border bg-card p-2 sm:p-3 lg:flex lg:min-h-[180px] lg:shrink lg:flex-col lg:overflow-hidden xl:w-[800px] xl:flex-none"
+      className="shrink-0 rounded-xl border bg-card p-2 sm:p-3 lg:flex lg:min-h-[180px] lg:shrink lg:flex-col lg:overflow-hidden lg:w-[724px] lg:flex-none xl:w-[800px]"
     >
       {/* top bar: keyboard tabs + undo / redo / copy (stays visible while key zones scroll) */}
       <div className="mb-2 flex shrink-0 items-center gap-2">

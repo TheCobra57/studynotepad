@@ -144,10 +144,10 @@ export function MathEditor({ tokens, onTokensChange, onInsert }: MathEditorProps
   }
 
   return (
-    // PC: no page scrolling — on wide screens the workspace panel sits LEFT of
-    // the keyboard (chemistry-tab style), on narrower ones the keyboard scrolls
-    // internally instead, so the canvas never disappears while typing
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4 xl:flex-row">
+    // PC: two panes — workspace + preview LEFT, keyboard RIGHT (chemistry-tab
+    // style), so the canvas never scrolls away and typing feels natural.
+    // Mobile stays stacked with page scrolling.
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4 lg:flex-row">
       {/* workspace + preview panel */}
       <div className="flex min-w-0 flex-col gap-3 lg:flex-1">
         {/* ---------- workspace (sticks to the top on narrower desktops) ---------- */}
@@ -156,7 +156,7 @@ export function MathEditor({ tokens, onTokensChange, onInsert }: MathEditorProps
             <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
               <PencilLine className="h-3.5 w-3.5 shrink-0" />
               Workspace
-              <span className="hidden lg:inline">— click a slot to place the cursor, then tap keys on the math keyboard</span>
+              <span className="hidden xl:inline">— click a slot to place the cursor, then tap keys on the math keyboard</span>
             </span>
             <Button
               variant="ghost"
@@ -186,7 +186,7 @@ export function MathEditor({ tokens, onTokensChange, onInsert }: MathEditorProps
 
         {/* ---------- generated LaTeX — rendered preview + raw string ---------- */}
         <div className="shrink-0 rounded-xl border bg-card p-3">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-medium text-muted-foreground">LaTeX — generated automatically</span>
             <div className="flex gap-1.5">
               <Button
