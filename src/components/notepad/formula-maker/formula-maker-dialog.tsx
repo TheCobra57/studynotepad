@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 import { FlaskConical, Sigma } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { FormulaToken } from '@/lib/notepad/formula/tokens'
+import type { MathToken } from '@/lib/notepad/formula/math-tokens'
 import { ChemistryEditor } from './chemistry-editor'
+import { MathEditor } from './math-editor'
 
 interface FormulaMakerDialogProps {
   open: boolean
@@ -17,13 +18,15 @@ interface FormulaMakerDialogProps {
 
 /**
  * Full-screen formula maker. The Chemistry tab is a visual, MS-Word-like
- * equation builder; the Math tab is a placeholder for a future release.
+ * equation builder; the Math tab is driven entirely by a Desmos-style
+ * on-screen keyboard (the OS keyboard is never summoned).
  *
  * Token state lives HERE (outside the Radix portal) so a half-built formula
  * survives the dialog being closed and reopened.
  */
 export function FormulaMakerDialog({ open, onOpenChange, onInsert }: FormulaMakerDialogProps) {
   const [tokens, setTokens] = useState<FormulaToken[]>([])
+  const [mathTokens, setMathTokens] = useState<MathToken[]>([])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -61,17 +64,7 @@ export function FormulaMakerDialog({ open, onOpenChange, onInsert }: FormulaMake
           </TabsContent>
 
           <TabsContent value="math" className="mt-0 flex min-h-0 flex-1 flex-col">
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-                <Sigma className="h-7 w-7 text-muted-foreground" />
-              </div>
-              <p className="text-base font-semibold">Math workspace</p>
-              <p className="max-w-sm text-sm text-muted-foreground">
-                A visual builder for fractions, powers, roots, integrals and more is on the way.
-                The Chemistry tab is fully available in the meantime.
-              </p>
-              <Badge variant="secondary">Coming soon</Badge>
-            </div>
+            <MathEditor tokens={mathTokens} onTokensChange={setMathTokens} onInsert={onInsert} />
           </TabsContent>
         </Tabs>
       </DialogContent>

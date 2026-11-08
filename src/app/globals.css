@@ -737,3 +737,12 @@ figure[data-image-ui] {
 
 /* flashcards flip styles v2 */
 .flip-scene2 { perspective: 1800px; }
+
+/* math workspace caret — Desmos-style blinking insertion point */
+@keyframes math-caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.math-caret {
+  animation: math-caret-blink 1.1s step-end infinite;
+}
