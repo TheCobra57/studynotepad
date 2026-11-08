@@ -1,8 +1,10 @@
 'use client'
 
-import { X } from 'lucide-react'
+import { Columns2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useNotepadStore } from '@/lib/notepad/store'
+import { useIsDesktop } from '@/hooks/use-media-query'
+import { useToast } from '@/hooks/use-toast'
 import type { Note } from '@/lib/notepad/types'
 
 /**
@@ -11,13 +13,22 @@ import type { Note } from '@/lib/notepad/types'
  * editor to that note (and its chapter in the sidebar); ✕ or middle-click
  * closes a tab, activating its neighbour.
  */
-export function NoteTabs({ onOpenNote }: { onOpenNote?: () => void }) {
+export function NoteTabs({
+  onOpenNote,
+  onSideBySide,
+}: {
+  onOpenNote?: () => void
+  /** desktop only — opens the “which tabs?” picker */
+  onSideBySide?: () => void
+}) {
   const notes = useNotepadStore((s) => s.notes)
   const openNoteIds = useNotepadStore((s) => s.openNoteIds)
   const selectedNoteId = useNotepadStore((s) => s.selectedNoteId)
   const selectNote = useNotepadStore((s) => s.selectNote)
   const closeNoteTab = useNotepadStore((s) => s.closeNoteTab)
   const setChapterTab = useNotepadStore((s) => s.setChapterTab)
+  const isDesktop = useIsDesktop()
+  const { toast } = useToast()
 
   // keep only ids that still resolve (covers brand-new imports etc.)
   const tabs = openNoteIds
@@ -25,6 +36,19 @@ export function NoteTabs({ onOpenNote }: { onOpenNote?: () => void }) {
     .filter(Boolean) as Note[]
 
   if (!tabs.length) return null
+
+  const sideBySideDisabled = tabs.length < 2
+  const handleSideBySide = () => {
+    if (!isDesktop) {
+      toast({
+        title: 'Side-by-side view',
+        description: 'Sorry! But this feature is not supported for mobile.',
+        variant: 'destructive',
+      })
+      return
+    }
+    onSideBySide?.()
+  }
 
   return (
     <div
@@ -77,6 +101,24 @@ export function NoteTabs({ onOpenNote }: { onOpenNote?: () => void }) {
           </div>
         )
       })}
+
+      {/* side-by-side entry — desktop opens the picker dialog, mobile says sorry */}
+      <div className="flex shrink-0 items-center pl-1">
+        <button
+          type="button"
+          aria-label="Show two tabs side by side"
+          title={
+            sideBySideDisabled
+              ? 'Open at least two notes to compare them side by side'
+              : 'Show two tabs side by side'
+          }
+          disabled={sideBySideDisabled}
+          onClick={handleSideBySide}
+          className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+        >
+          <Columns2 className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   )
 }

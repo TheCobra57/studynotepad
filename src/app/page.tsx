@@ -43,6 +43,8 @@ import { Sidebar } from '@/components/notepad/sidebar'
 import { NotesPane } from '@/components/notepad/notes-pane'
 import { EditorPane } from '@/components/notepad/editor-pane'
 import { NoteTabs } from '@/components/notepad/note-tabs'
+import { SideBySideDialog, type SideBySideSelection } from '@/components/notepad/side-by-side-dialog'
+import { SideBySideView } from '@/components/notepad/side-by-side-view'
 import { FlashcardsPane } from '@/components/notepad/flashcards/flashcards-pane'
 import { QuizPane } from '@/components/notepad/quiz/quiz-pane'
 import { CheatSheet } from '@/components/notepad/cheat-sheet'
@@ -70,6 +72,8 @@ export default function Home() {
   const [printOpen, setPrintOpen] = useState(false)
   const [mdImportOpen, setMdImportOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [sideBySideDialogOpen, setSideBySideDialogOpen] = useState(false)
+  const [sideBySide, setSideBySide] = useState<SideBySideSelection | null>(null)
   const [focusMode, setFocusMode] = useState<EditorFocusMode>('off')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mainRef = useRef<HTMLElement | null>(null)
@@ -166,6 +170,14 @@ export default function Home() {
   const flashcards = useNotepadStore((s) => s.flashcards)
   const quizzes = useNotepadStore((s) => s.quizzes)
   const chapterTab = useNotepadStore((s) => s.chapterTab)
+
+  // the two notes of the side-by-side view (null once either is deleted)
+  const sideLeft = sideBySide ? notes.find((n) => n.id === sideBySide.leftId) ?? null : null
+  const sideRight = sideBySide ? notes.find((n) => n.id === sideBySide.rightId) ?? null : null
+  useEffect(() => {
+    if (sideBySide && (!sideLeft || !sideRight)) setSideBySide(null)
+  }, [sideBySide, sideLeft, sideRight])
+  const exitSideBySide = () => setSideBySide(null)
   const { importData, clearAll } = useNotepadStore()
   const { toast } = useToast()
 
@@ -347,11 +359,27 @@ export default function Home() {
       {/* Note tabs — swappable open notes (Settings → Note tabs → Multiple);
           hidden with the rest of the chrome in focus mode */}
       {!focusActive && tabMode === 'multi' && openNoteIds.length > 0 && (
-        <NoteTabs onOpenNote={() => setMobileView('editor')} />
+        <NoteTabs
+          onOpenNote={() => {
+            setSideBySide(null)
+            setMobileView('editor')
+          }}
+          onSideBySide={() => setSideBySideDialogOpen(true)}
+        />
       )}
 
-      {/* Panes — in focus mode only the editor remains */}
+      {/* Panes — side-by-side replaces everything with two full-width panes;
+          in focus mode only the editor remains */}
       <main ref={mainRef} className="flex min-h-0 flex-1">
+        {sideLeft && sideRight ? (
+          <SideBySideView
+            left={sideLeft}
+            right={sideRight}
+            chapters={chapters}
+            onExit={exitSideBySide}
+          />
+        ) : (
+          <>
         <aside
           className={cn(
             'w-full shrink-0 overflow-y-auto border-r bg-muted/20 lg:w-64',
@@ -429,6 +457,8 @@ export default function Home() {
             />
           )}
         </section>
+          </>
+        )}
       </main>
 
       {/* Footer — hidden while a focus mode is active */}
@@ -447,6 +477,14 @@ export default function Home() {
       <CheatSheet open={cheatOpen} onOpenChange={setCheatOpen} />
       <WelcomeDialog onChoose={handleWelcomeChoice} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SideBySideDialog
+        open={sideBySideDialogOpen}
+        onOpenChange={setSideBySideDialogOpen}
+        onConfirm={(sel) => {
+          setSideBySide(sel)
+          setSideBySideDialogOpen(false)
+        }}
+      />
       <MdImportDialog
         open={mdImportOpen}
         onOpenChange={setMdImportOpen}
