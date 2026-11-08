@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { FONT_OPTIONS, SIZE_OPTIONS, usePrefsStore, type FontOption } from '@/lib/prefs'
+import { FONT_OPTIONS, SIZE_OPTIONS, usePrefsStore, type FontOption, type TabMode } from '@/lib/prefs'
 
 /** inline style so each picker row previews its own family */
 const familyStyle = (opt: FontOption) =>
@@ -27,8 +27,10 @@ interface SettingsDialogProps {
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const font = usePrefsStore((s) => s.font)
   const noteSize = usePrefsStore((s) => s.noteSize)
+  const tabMode = usePrefsStore((s) => s.tabMode)
   const setFont = usePrefsStore((s) => s.setFont)
   const setNoteSize = usePrefsStore((s) => s.setNoteSize)
+  const setTabMode = usePrefsStore((s) => s.setTabMode)
   const resetPrefs = usePrefsStore((s) => s.resetPrefs)
 
   return (
@@ -138,6 +140,50 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             <p className="mt-1 font-bold tracking-tight" style={{ fontSize: 'calc(var(--note-h3-size) * 0.9)' }}>
               Heading sample
             </p>
+          </div>
+        </section>
+
+        {/* ---------- Note tabs ---------- */}
+        <section>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Note tabs
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground/80">
+            Multiple keeps a swappable tab bar for open notes below the app header.
+          </p>
+          <div
+            className="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
+            role="radiogroup"
+            aria-label="Note tabs mode"
+          >
+            {(
+              [
+                { id: 'single', label: 'Single tab', hint: 'One note at a time' },
+                { id: 'multi', label: 'Multiple tabs', hint: 'Open several, swap freely' },
+              ] as { id: TabMode; label: string; hint: string }[]
+            ).map((opt) => {
+              const selected = tabMode === opt.id
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setTabMode(opt.id)}
+                  className={cn(
+                    'rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
+                    selected
+                      ? 'bg-background shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {opt.label}
+                  <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground/80">
+                    {opt.hint}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </section>
 

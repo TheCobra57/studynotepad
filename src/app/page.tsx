@@ -42,6 +42,7 @@ import { useChromeVisibility } from '@/hooks/use-chrome-visibility'
 import { Sidebar } from '@/components/notepad/sidebar'
 import { NotesPane } from '@/components/notepad/notes-pane'
 import { EditorPane } from '@/components/notepad/editor-pane'
+import { NoteTabs } from '@/components/notepad/note-tabs'
 import { FlashcardsPane } from '@/components/notepad/flashcards/flashcards-pane'
 import { QuizPane } from '@/components/notepad/quiz/quiz-pane'
 import { CheatSheet } from '@/components/notepad/cheat-sheet'
@@ -51,6 +52,7 @@ import { PrintRoot } from '@/components/notepad/print-root'
 import { PrintDialog } from '@/components/notepad/print-dialog'
 import { MdImportDialog } from '@/components/notepad/md-import-dialog'
 import { SettingsDialog } from '@/components/notepad/settings-dialog'
+import { usePrefsStore } from '@/lib/prefs'
 
 const emptySubscribe = () => () => {}
 
@@ -90,6 +92,8 @@ export default function Home() {
   // saved data is read from IndexedDB asynchronously — keep the splash up
   // until it lands so the real notes render without a seed-data flash
   const hasHydrated = useNotepadStore((s) => s.hasHydrated)
+  const tabMode = usePrefsStore((s) => s.tabMode)
+  const openNoteIds = useNotepadStore((s) => s.openNoteIds)
 
   const focusActive = focusMode !== 'off'
 
@@ -338,6 +342,12 @@ export default function Home() {
         </div>
         </div>
       </header>
+      )}
+
+      {/* Note tabs — swappable open notes (Settings → Note tabs → Multiple);
+          hidden with the rest of the chrome in focus mode */}
+      {!focusActive && tabMode === 'multi' && openNoteIds.length > 0 && (
+        <NoteTabs onOpenNote={() => setMobileView('editor')} />
       )}
 
       {/* Panes — in focus mode only the editor remains */}

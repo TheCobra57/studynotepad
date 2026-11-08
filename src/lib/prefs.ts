@@ -11,6 +11,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 
 export type FontId = 'default' | 'literata' | 'lora' | 'merriweather' | 'source-serif'
 export type NoteSizeId = 'sm' | 'md' | 'lg' | 'xl'
+export type TabMode = 'single' | 'multi'
 
 export interface FontOption {
   id: FontId
@@ -63,8 +64,11 @@ export const SIZE_OPTIONS: { id: NoteSizeId; label: string }[] = [
 interface PrefsState {
   font: FontId
   noteSize: NoteSizeId
+  /** single = one note at a time (no tab bar); multi = swappable tab bar */
+  tabMode: TabMode
   setFont: (font: FontId) => void
   setNoteSize: (size: NoteSizeId) => void
+  setTabMode: (mode: TabMode) => void
   resetPrefs: () => void
 }
 
@@ -79,9 +83,11 @@ export const usePrefsStore = create<PrefsState>()(
     (set) => ({
       font: 'default',
       noteSize: 'md',
+      tabMode: 'single',
       setFont: (font) => set({ font }),
       setNoteSize: (noteSize) => set({ noteSize }),
-      resetPrefs: () => set({ font: 'default', noteSize: 'md' }),
+      setTabMode: (tabMode) => set({ tabMode }),
+      resetPrefs: () => set({ font: 'default', noteSize: 'md', tabMode: 'single' }),
     }),
     {
       name: 'studypad-prefs-v1',

@@ -26,6 +26,16 @@ function uid(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+/** max simultaneously open note tabs (multi-tab mode) */
+const MAX_OPEN_TABS = 12
+
+/** append a note to the open-tab list (no duplicates, oldest dropped past cap) */
+function withTab(openNoteIds: string[], noteId: string): string[] {
+  if (openNoteIds.includes(noteId)) return openNoteIds
+  const next = [...openNoteIds, noteId]
+  return next.length > MAX_OPEN_TABS ? next.slice(next.length - MAX_OPEN_TABS) : next
+}
+
 /** Pinned notes first, then most recently updated. Once every note in a
  *  list has been manually arranged (order set on all of them), the manual
  *  order wins completely — pinning becomes a badge only. */
@@ -50,6 +60,8 @@ interface SelectionInput {
   quizzes: Quiz[]
   selectedChapterId: string | null
   selectedNoteId: string | null
+  /** notes currently open as tabs (multi-tab mode) — oldest first */
+  openNoteIds: string[]
   /** which flashcard the workspace has open — session-ish, not persisted */
   selectedCardId: string | null
   /** which quiz & question the workspace has open — session-ish, not persisted */
@@ -85,9 +97,17 @@ function normalizeSelection(state: SelectionInput) {
   if (!questionId || !quizQuestions.some((q) => q.id === questionId)) {
     questionId = quizQuestions.length ? quizQuestions[0].id : null
   }
+  // open tabs keep their saved order, minus notes that no longer exist;
+  // the selected note always has a tab so the bar can highlight it
+  const openNoteIds = state.openNoteIds.filter((id) =>
+    state.notes.some((n) => n.id === id),
+  )
+  if (noteId && !openNoteIds.includes(noteId)) openNoteIds.unshift(noteId)
+
   return {
     selectedChapterId: chapterId,
     selectedNoteId: noteId,
+    openNoteIds,
     selectedCardId: cardId,
     selectedQuizId: quizId,
     selectedQuestionId: questionId,
@@ -148,6 +168,8 @@ export interface NotepadStore extends SelectionInput {
 
   selectChapter: (chapterId: string) => void
   selectNote: (id: string) => void
+  /** remove a note's tab; if it was the open one, its neighbour takes over */
+  closeNoteTab: (id: string) => void
   setSearchQuery: (q: string) => void
 
   /** arrange mode commits — ids are the full new order of that group */
@@ -171,6 +193,7 @@ const seedSelection = normalizeSelection({
   ...seedState,
   selectedChapterId: seedChapters[0].id,
   selectedNoteId: seedNotes[0].id,
+  openNoteIds: seedNotes[0] ? [seedNotes[0].id] : [],
   selectedCardId: seedFlashcards[0]?.id ?? null,
   selectedQuizId: seedQuizzes[0]?.id ?? null,
   selectedQuestionId: seedQuizzes[0]?.questions[0]?.id ?? null,
@@ -544,6 +567,7 @@ export const useNotepadStore = create<NotepadStore>()(
             notes: [note, ...s.notes],
             selectedChapterId: chapterId,
             selectedNoteId: note.id,
+            openNoteIds: withTab(s.openNoteIds, note.id),
           }
         })
         return created as Note
@@ -562,11 +586,24 @@ export const useNotepadStore = create<NotepadStore>()(
       deleteNote: (id) =>
         set((s) => {
           const notes = s.notes.filter((n) => n.id !== id)
+          const openNoteIds = s.openNoteIds.filter((n) => n !== id)
           if (s.selectedNoteId === id) {
+            // the nearest remaining tab takes over (right neighbour first)
+            const idx = s.openNoteIds.indexOf(id)
+            const nextId = openNoteIds[Math.min(idx, openNoteIds.length - 1)] ?? null
+            if (nextId) {
+              const note = notes.find((n) => n.id === nextId)
+              return {
+                notes,
+                openNoteIds,
+                selectedNoteId: nextId,
+                ...(note ? { selectedChapterId: note.chapterId } : {}),
+              }
+            }
             const remaining = sortNotes(notes.filter((n) => n.chapterId === s.selectedChapterId))
-            return { notes, selectedNoteId: remaining.length ? remaining[0].id : null }
+            return { notes, openNoteIds, selectedNoteId: remaining.length ? remaining[0].id : null }
           }
-          return { notes }
+          return { notes, openNoteIds }
         }),
 
       togglePin: (id) =>
@@ -583,6 +620,9 @@ export const useNotepadStore = create<NotepadStore>()(
           return {
             selectedChapterId: chapterId,
             selectedNoteId: chapterNotes.length ? chapterNotes[0].id : null,
+            openNoteIds: chapterNotes.length
+              ? withTab(s.openNoteIds, chapterNotes[0].id)
+              : s.openNoteIds,
             selectedCardId: deck.length ? deck[0].id : null,
             selectedQuizId: chapterQuizzes.length ? chapterQuizzes[0].id : null,
             selectedQuestionId: chapterQuizzes[0]?.questions[0]?.id ?? null,
@@ -649,7 +689,32 @@ export const useNotepadStore = create<NotepadStore>()(
         set((s) => {
           const note = s.notes.find((n) => n.id === id)
           if (!note) return s
-          return { selectedNoteId: id, selectedChapterId: note.chapterId }
+          return {
+            selectedNoteId: id,
+            selectedChapterId: note.chapterId,
+            openNoteIds: withTab(s.openNoteIds, id),
+          }
+        }),
+
+      closeNoteTab: (id) =>
+        set((s) => {
+          const openNoteIds = s.openNoteIds.filter((n) => n !== id)
+          if (!s.openNoteIds.includes(id)) return s
+          if (s.selectedNoteId !== id) return { openNoteIds }
+          // activate the nearest remaining tab (right neighbour first)
+          const idx = s.openNoteIds.indexOf(id)
+          const nextId = openNoteIds[Math.min(idx, openNoteIds.length - 1)] ?? null
+          if (nextId) {
+            const note = s.notes.find((n) => n.id === nextId)
+            return {
+              openNoteIds,
+              selectedNoteId: nextId,
+              ...(note ? { selectedChapterId: note.chapterId } : {}),
+            }
+          }
+          // last tab closed — fall back to the current chapter's first note
+          const remaining = sortNotes(s.notes.filter((n) => n.chapterId === s.selectedChapterId))
+          return { openNoteIds, selectedNoteId: remaining.length ? remaining[0].id : null }
         }),
 
       setSearchQuery: (q) => set({ searchQuery: q }),
@@ -688,6 +753,7 @@ export const useNotepadStore = create<NotepadStore>()(
           quizzes: [],
           selectedChapterId: null,
           selectedNoteId: null,
+          openNoteIds: [],
           selectedCardId: null,
           selectedQuizId: null,
           selectedQuestionId: null,
@@ -711,7 +777,11 @@ export const useNotepadStore = create<NotepadStore>()(
       // fine — the UI splash gate covers it
       onRehydrateStorage: () => (_state, error) => {
         if (error) console.warn('StudyPad: could not load saved data', error)
-        useNotepadStore.setState({ hasHydrated: true })
+        useNotepadStore.setState((s) => ({
+          hasHydrated: true,
+          // drop open-tab ids that no longer match any saved note
+          openNoteIds: s.openNoteIds.filter((id) => s.notes.some((n) => n.id === id)),
+        }))
       },
       partialize: (s) => ({
         subjects: s.subjects,
@@ -721,6 +791,7 @@ export const useNotepadStore = create<NotepadStore>()(
         quizzes: s.quizzes,
         selectedChapterId: s.selectedChapterId,
         selectedNoteId: s.selectedNoteId,
+        openNoteIds: s.openNoteIds,
       }),
     },
   ),
