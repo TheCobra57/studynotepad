@@ -530,12 +530,173 @@ Light energy ends up stored in the chemical bonds of ==glucose==.`,
 | Chloroplast | Photosynthesis (plant cells) |`,
     1,
   ),
+  f(
+    'card-rx-1',
+    'ch-chem-1',
+    `What is a ==catalyst==, and does it get used up?`,
+    `A substance that speeds up a reaction by providing an **alternative pathway with lower activation energy**.
+
+- It is ==not consumed== — the same mass comes out at the end
+- It speeds up the forward *and* reverse reaction equally, so the ==equilibrium position is unchanged==
+
+$$\\ce{2H2O2 ->[\\text{MnO2 catalyst}] 2H2O + O2 ^}$$`,
+    8,
+  ),
+  f(
+    'card-rx-2',
+    'ch-chem-1',
+    `Why is ==rusting== a redox reaction — and how can it be prevented?`,
+    `Iron is ==oxidised== (loses electrons) while oxygen is ==reduced== (gains them). Rust is hydrated iron(III) oxide:
+
+$$\\ce{4Fe + 3O2 -> 2Fe2O3}$$
+
+| Prevention | How it works |
+|---|---|
+| Painting / oiling | physical barrier keeps out air & water |
+| Galvanising | zinc coat corrodes ==first== (sacrificial protection) |
+| Alloying (stainless) | chromium layer is unreactive |`,
+    7,
+  ),
+  f(
+    'card-ab-1',
+    'ch-chem-2',
+    `Name ==two indicators== and their colours in acid vs alkali.`,
+    `| Indicator | In acid | In alkali |
+|---|---|---|
+| Litmus | red | blue |
+| Methyl orange | red | yellow |
+| Phenolphthalein | colourless | pink |
+
+==Universal indicator== shows the whole pH range as one continuous colour gradient.`,
+    7,
+  ),
+  f(
+    'card-ab-2',
+    'ch-chem-2',
+    `What salt forms when ==sulphuric acid== reacts with potassium hydroxide?`,
+    `**Potassium sulphate**, $\\ce{K2SO4}$:
+
+$$\\ce{H2SO4 + 2KOH -> K2SO4 + 2H2O}$$
+
+Acid + base → ==salt + water==, always. The name comes from the acid (sulphuric → ==sulphate==) and the base (potassium).`,
+    6,
+  ),
+  f(
+    'card-kin-1',
+    'ch-phy-1',
+    `What does the ==gradient== of a distance–time graph tell you?`,
+    `The **speed** of the object.
+
+| Graph shape | Meaning |
+|---|---|
+| Horizontal line | object is ==at rest== |
+| Straight slope | constant speed |
+| Steepening curve | accelerating |
+| Levelling curve | decelerating |`,
+    6,
+  ),
+  f(
+    'card-kin-2',
+    'ch-phy-1',
+    `Why does a ==skydiver== reach terminal velocity?`,
+    `Air resistance grows with speed — until it ==balances weight==:
+
+1. At first: weight > drag → accelerates downwards
+2. As speed grows, drag grows → resultant force shrinks → acceleration falls
+3. Drag = weight → resultant force is ==zero== → constant (terminal) velocity`,
+    5,
+  ),
+  f(
+    'card-elec-1',
+    'ch-phy-2',
+    `State the ==current== and ==voltage== rules for series and parallel circuits.`,
+    `| | Series | Parallel |
+|---|---|---|
+| Current | the ==same== everywhere | splits between branches |
+| Voltage | shared between components | the ==same== across each branch |`,
+    5,
+  ),
+  f(
+    'card-elec-2',
+    'ch-phy-2',
+    `A 230 V heater draws a current of 4 A. What ==power== does it use?`,
+    `$$P = VI = 230 \\times 4 = \\pu{920 W}$$
+
+Left on for 30 s it transfers $E = Pt = 920 \\times 30 = \\pu{27600 J}$ — energy is ==power × time==.`,
+    4,
+  ),
+  f(
+    'card-calc-1',
+    'ch-math-1',
+    `State the ==quotient rule== for $y = \\frac{f(x)}{g(x)}$.`,
+    `$$\\frac{dy}{dx} = \\frac{g(x)\\,f'(x) - f(x)\\,g'(x)}{[g(x)]^2}$$
+
+Mnemonic: **low d-high minus high d-low, over low-low** — the order of the subtraction ==matters==, unlike in the product rule.`,
+    4,
+  ),
+  f(
+    'card-calc-2',
+    'ch-math-1',
+    `How do you evaluate a ==definite integral== like $\\int_1^3 2x\\,dx$?`,
+    `Find the antiderivative, then subtract at the limits:
+
+$$\\int_1^3 2x\\,dx = \\left[x^2\\right]_1^3 = 9 - 1 = 8$$
+
+The constant of integration $C$ ==cancels out== in definite integrals, so you can leave it out.`,
+    3,
+  ),
+  f(
+    'card-alg-1',
+    'ch-math-2',
+    `Factorise $x^2 - 49$ — which ==identity== applies?`,
+    `**Difference of two squares:** $a^2 - b^2 = (a-b)(a+b)$
+
+$$x^2 - 49 = (x-7)(x+7)$$
+
+Spot it whenever two ==perfect squares== are subtracted — there is no middle $x$ term.`,
+    3,
+  ),
+  f(
+    'card-alg-2',
+    'ch-math-2',
+    `Write $x^2 + 6x + 5$ in ==completed square== form.`,
+    `$$x^2 + 6x + 5 = (x+3)^2 - 9 + 5 = (x+3)^2 - 4$$
+
+Halve the $x$ coefficient ($6 \\to 3$), square it — then ==subtract what you added==.
+
+Bonus: completed-square form reveals the turning point instantly: $(-3, -4)$.`,
+    2,
+  ),
+  f(
+    'card-cell-1',
+    'ch-bio-1',
+    `What is the difference between ==diffusion== and ==osmosis==?`,
+    `| | Diffusion | Osmosis |
+|---|---|---|
+| Moves | any gas/liquid particles | ==water only== |
+| Direction | high → low concentration | high → low water potential, across a ==partially permeable membrane== |
+| Example | oxygen diffuses into blood | water enters root hair cells |`,
+    2,
+  ),
+  f(
+    'card-cell-2',
+    'ch-bio-1',
+    `How is a ==sperm cell== specialised for its job?`,
+    `| Feature | Function |
+|---|---|
+| Tail (flagellum) | swims towards the egg |
+| Many mitochondria | release ==ATP== to power swimming |
+| Enzymes in the head | digest through the egg's outer layer |
+| Half the DNA | combines with the egg's at fertilisation |`,
+    1,
+  ),
 ]
 
 // ---------------------------------------------------------------------------
-// Seed quizzes — a demo quiz per subject (each mixing all four question
-// types) so the Quiz tab is never a dead end on first run. Returning users
-// keep whatever quizzes they already have (persist wins over the seed).
+// Seed quizzes — a demo quiz for every chapter (each mixing all four
+// question types) so the Quiz tab is never a dead end on first run.
+// Returning users keep whatever quizzes they already have (persist wins
+// over the seed).
 // ---------------------------------------------------------------------------
 
 function q(
@@ -605,6 +766,50 @@ Name the gas given off (the ____ in the equation).`,
       timeLimit: 30,
     },
   ),
+  q(
+    'quizq-5',
+    'mcq',
+    `Which of these is a ==displacement== reaction?`,
+    {
+      options: [
+        'Iron + copper sulphate → iron sulphate + copper',
+        'Calcium carbonate → calcium oxide + carbon dioxide',
+        'Water → hydrogen + oxygen',
+        'Methane + oxygen → carbon dioxide + water',
+      ],
+      correctOption: 0,
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-6',
+    'fill-blank',
+    `A catalyst increases the ____ of a reaction but is ==not consumed==.`,
+    {
+      acceptedAnswers: ['rate', 'speed', 'rate of reaction'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-7',
+    'name-item',
+    `What ==type== of reaction is this?
+
+$$\\ce{CaCO3 -> CaO + CO2}$$`,
+    {
+      acceptedAnswers: ['decomposition', 'thermal decomposition'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-8',
+    'answer',
+    `Explain why a ==higher concentration== of acid increases the rate of a reaction.`,
+    {
+      keywords: ['collision', 'frequent', 'concentration'],
+      timeLimit: 30,
+    },
+  ),
 ]
 
 const seedKinematicsQuestions: QuizQuestion[] = [
@@ -642,6 +847,43 @@ const seedKinematicsQuestions: QuizQuestion[] = [
     `Explain the difference between **speed** and **velocity**.`,
     {
       keywords: ['vector', 'direction', 'magnitude'],
+      timeLimit: 30,
+    },
+  ),
+  q(
+    'quizq-phy-5',
+    'mcq',
+    `A car moves at ==constant velocity==. Its acceleration is…`,
+    {
+      options: ['9.8 m/s^2', '0', 'constant but not zero', 'equal to the speed'],
+      correctOption: 1,
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-phy-6',
+    'fill-blank',
+    `Complete the third equation of motion: $v^2 = u^2 + 2$ ____`,
+    {
+      acceptedAnswers: ['as', 'a s'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-phy-7',
+    'name-item',
+    `The ==area under== a velocity–time graph gives the ____.`,
+    {
+      acceptedAnswers: ['displacement', 'distance'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-phy-8',
+    'answer',
+    `Explain why a falling object's acceleration ==decreases== until it reaches terminal velocity.`,
+    {
+      keywords: ['air resistance', 'weight', 'balance'],
       timeLimit: 30,
     },
   ),
@@ -685,6 +927,43 @@ const seedCalculusQuestions: QuizQuestion[] = [
       timeLimit: 30,
     },
   ),
+  q(
+    'quizq-math-5',
+    'mcq',
+    `What is $\\frac{d}{dx}(e^x)$?`,
+    {
+      options: ['e^x', 'xe^(x-1)', 'e^x / x', 'ln x'],
+      correctOption: 0,
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-math-6',
+    'fill-blank',
+    `Integrate: $\\int \\frac{1}{x}\\,dx = $ ____`,
+    {
+      acceptedAnswers: ['ln x', 'log x', 'ln abs x'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-math-7',
+    'name-item',
+    `Evaluate the definite integral $\\int_0^1 x^2\\,dx$.`,
+    {
+      acceptedAnswers: ['1/3', 'one third', '0.33', '0.333'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-math-8',
+    'answer',
+    `State the ==power rule== for integration and when its special case applies.`,
+    {
+      keywords: ['power', 'divide', 'ln'],
+      timeLimit: 30,
+    },
+  ),
 ]
 
 const seedCellQuestions: QuizQuestion[] = [
@@ -725,6 +1004,43 @@ const seedCellQuestions: QuizQuestion[] = [
       timeLimit: 30,
     },
   ),
+  q(
+    'quizq-bio-5',
+    'mcq',
+    `Which structure ==controls== what enters and leaves the cell?`,
+    {
+      options: ['Nucleus', 'Cell membrane', 'Cell wall', 'Vacuole'],
+      correctOption: 1,
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-bio-6',
+    'fill-blank',
+    `Photosynthesis needs carbon dioxide + ____ + light energy.`,
+    {
+      acceptedAnswers: ['water', 'h2o'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-bio-7',
+    'name-item',
+    `The ==jelly-like== substance in which organelles are suspended is the ____.`,
+    {
+      acceptedAnswers: ['cytoplasm', 'the cytoplasm'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-bio-8',
+    'answer',
+    `Explain how ==root hair cells== are adapted for absorbing water.`,
+    {
+      keywords: ['surface area', 'osmosis', 'thin'],
+      timeLimit: 30,
+    },
+  ),
 ]
 
 const seedPhQuestions: QuizQuestion[] = [
@@ -762,6 +1078,161 @@ const seedPhQuestions: QuizQuestion[] = [
     `Why must you always add **acid to water**, and never water to acid?`,
     {
       keywords: ['exothermic', 'heat', 'splash'],
+      timeLimit: 30,
+    },
+  ),
+  q(
+    'quizq-chem-9',
+    'mcq',
+    `Which solution is ==acidic==?`,
+    {
+      options: ['Lemon juice, pH 3', 'Pure water, pH 7', 'Baking soda, pH 9', 'Soap, pH 10'],
+      correctOption: 0,
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-chem-10',
+    'fill-blank',
+    `Blue litmus paper turns ____ in an acid.`,
+    {
+      acceptedAnswers: ['red'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-chem-11',
+    'name-item',
+    `Name the salt formed when ==hydrochloric acid== reacts with sodium hydroxide.`,
+    {
+      acceptedAnswers: ['sodium chloride', 'nacl', 'table salt', 'common salt'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-chem-12',
+    'answer',
+    `Describe how you would ==prepare== a pure, dry sample of a soluble salt in the lab.`,
+    {
+      keywords: ['acid', 'evaporate', 'crystallise'],
+      timeLimit: 30,
+    },
+  ),
+]
+
+const seedElectricityQuestions: QuizQuestion[] = [
+  q(
+    'quizq-elec-1',
+    'mcq',
+    `What is the ==SI unit== of resistance?`,
+    {
+      options: ['Volt', 'Ampere', 'Ohm', 'Watt'],
+      correctOption: 2,
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-elec-2',
+    'mcq',
+    `In a ==series== circuit, what is the same through every component?`,
+    {
+      options: ['Current', 'Voltage', 'Resistance', 'Power'],
+      correctOption: 0,
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-elec-3',
+    'fill-blank',
+    `Complete Ohm's law: $V = I \\times$ ____`,
+    {
+      acceptedAnswers: ['resistance', 'r', 'ohms'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-elec-4',
+    'name-item',
+    `Which ==instrument== measures electric current in a circuit?`,
+    {
+      acceptedAnswers: ['ammeter', 'an ammeter', 'amp meter'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-elec-5',
+    'name-item',
+    `A 230 V appliance draws a current of 4 A. Calculate its ==power== in watts.`,
+    {
+      acceptedAnswers: ['920 w', '920', '920 watts'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-elec-6',
+    'answer',
+    `Explain why adding more branches to a ==parallel== circuit lowers the total resistance.`,
+    {
+      keywords: ['paths', 'current'],
+      timeLimit: 30,
+    },
+  ),
+]
+
+const seedAlgebraQuestions: QuizQuestion[] = [
+  q(
+    'quizq-alg-1',
+    'mcq',
+    `Factorise $x^2 - 9$.`,
+    {
+      options: ['(x-3)(x+3)', '(x-9)(x+1)', '(x+3)^2', '(x-3)^2'],
+      correctOption: 0,
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-alg-2',
+    'mcq',
+    `If the ==discriminant== $\\Delta = 0$, the equation has…`,
+    {
+      options: ['two distinct real roots', 'one repeated root', 'complex conjugate roots', 'no roots'],
+      correctOption: 1,
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-alg-3',
+    'fill-blank',
+    `Quadratic formula: you divide $-b \\pm \\sqrt{b^2 - 4ac}$ by ____`,
+    {
+      acceptedAnswers: ['2a', '2 a', 'two a'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-alg-4',
+    'name-item',
+    `What is the name of the expression $b^2 - 4ac$?`,
+    {
+      acceptedAnswers: ['discriminant', 'the discriminant'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-alg-5',
+    'name-item',
+    `Solve $x^2 - 5x + 6 = 0$. What is the ==smaller== root?`,
+    {
+      acceptedAnswers: ['2', 'x = 2', 'two'],
+      timeLimit: 20,
+    },
+  ),
+  q(
+    'quizq-alg-6',
+    'answer',
+    `Explain how ==Vieta's formulas== help you check a factorisation.`,
+    {
+      keywords: ['sum', 'product', 'roots'],
       timeLimit: 30,
     },
   ),
@@ -807,5 +1278,21 @@ export const seedQuizzes: Quiz[] = [
     questions: seedPhQuestions,
     createdAt: now - 4 * day,
     updatedAt: now - 4 * day / 2,
+  },
+  {
+    id: 'quiz-phy-2',
+    chapterId: 'ch-phy-2',
+    title: 'Electricity — quick check',
+    questions: seedElectricityQuestions,
+    createdAt: now - 3 * day,
+    updatedAt: now - 3 * day / 2,
+  },
+  {
+    id: 'quiz-math-2',
+    chapterId: 'ch-math-2',
+    title: 'Algebra — quick check',
+    questions: seedAlgebraQuestions,
+    createdAt: now - 2 * day,
+    updatedAt: now - 2 * day / 2,
   },
 ]
