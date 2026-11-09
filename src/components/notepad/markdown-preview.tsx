@@ -72,7 +72,10 @@ function remarkLabels() {
         if (last < child.value.length) {
           parts.push({ type: 'text', value: child.value.slice(last) })
         }
-        children.splice(i, parts.length, ...parts)
+        // replace ONLY the text node itself with the split parts — removing
+        // parts.length nodes would swallow the siblings that follow it
+        // (inline math, links, bold… anything after a ==label==)
+        children.splice(i, 1, ...parts)
         i += parts.length - 1
       }
     }
